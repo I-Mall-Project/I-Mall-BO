@@ -64,7 +64,7 @@ app.use(express.static("public"));
 // 🚦 Routes
 // =============================
 app.get("/", (req, res) => {
-  res.json({ msg: "GiftShop API is working..." });
+  res.json({ msg: "iMall API is working..." });
 });
 
 app.use("/api", allRoutes);
@@ -74,5 +74,5 @@ app.use("/api", allRoutes);
 // =============================
 const port = process.env.PORT || 8000;
 app.listen(port, () => {
-  console.log(`✅ GiftShop is running on port ${port}`);
+  console.log(`✅ iMall is running on port ${port}`);
 });
