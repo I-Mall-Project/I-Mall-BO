@@ -1017,6 +1017,60 @@ export const deleteCategory = async (req, res) => {
 
 
 // get all categories for customer
+// export const getCategoriesForCustomer = async (req, res) => {
+//   try {
+//     const { name = "", limit, page } = req.query;
+
+//     const categories = await prisma.category.findMany({
+//       where: {
+//         isDeleted: false,
+//         isActive: true,
+//         name: {
+//           contains: name,
+//           mode: "insensitive",
+//         },
+//       },
+//       select: {
+//         user: { select: { name: true, image: true } },
+//         id: true,
+//         name: true,
+//         image: true,
+//         slug: true,
+//         discount: true, // added discount
+//         createdAt: true,
+//         subcategory: true,
+//         subsubcategory: true,
+//       },
+//       orderBy: {
+//         createdAt: "desc",
+//       },
+//       skip: limit && page ? parseInt(limit) * (parseInt(page) - 1) : parseInt(defaultLimit()) * (parseInt(defaultPage()) - 1),
+//       take: limit ? parseInt(limit) : parseInt(defaultLimit()),
+//     });
+
+//     if (!categories || categories.length === 0) {
+//       return res
+//         .status(200)
+//         .json(jsonResponse(true, "No category is available", []));
+//     }
+
+//     return res
+//       .status(200)
+//       .json(
+//         jsonResponse(
+//           true,
+//           `${categories.length} categories found`,
+//           categories
+//         )
+//       );
+//   } catch (error) {
+//     console.log(error);
+//     return res
+//       .status(500)
+//       .json(jsonResponse(false, "Something went wrong. Try again", null));
+//   }
+// };
+
 export const getCategoriesForCustomer = async (req, res) => {
   try {
     const { name = "", limit, page } = req.query;
@@ -1030,22 +1084,39 @@ export const getCategoriesForCustomer = async (req, res) => {
           mode: "insensitive",
         },
       },
-      select: {
-        user: { select: { name: true, image: true } },
-        id: true,
-        name: true,
-        image: true,
-        slug: true,
-        discount: true, // added discount
-        createdAt: true,
-        subcategory: true,
-        subsubcategory: true,
+
+      // ⭐ Include Brand Relation (VERY IMPORTANT)
+      include: {
+        brand: {
+          select: {
+            id: true,
+            name: true,
+            image: true,
+            slug: true,
+          },
+        },
+
+        user: {
+          select: {
+            name: true,
+            image: true,
+          },
+        },
       },
+
       orderBy: {
         createdAt: "desc",
       },
-      skip: limit && page ? parseInt(limit) * (parseInt(page) - 1) : parseInt(defaultLimit()) * (parseInt(defaultPage()) - 1),
-      take: limit ? parseInt(limit) : parseInt(defaultLimit()),
+
+      skip:
+        limit && page
+          ? parseInt(limit) * (parseInt(page) - 1)
+          : parseInt(defaultLimit()) *
+            (parseInt(defaultPage()) - 1),
+
+      take: limit
+        ? parseInt(limit)
+        : parseInt(defaultLimit()),
     });
 
     if (!categories || categories.length === 0) {
@@ -1054,24 +1125,22 @@ export const getCategoriesForCustomer = async (req, res) => {
         .json(jsonResponse(true, "No category is available", []));
     }
 
-    return res
-      .status(200)
-      .json(
-        jsonResponse(
-          true,
-          `${categories.length} categories found`,
-          categories
-        )
-      );
+    return res.status(200).json(
+      jsonResponse(
+        true,
+        `${categories.length} categories found`,
+        categories
+      )
+    );
+
   } catch (error) {
     console.log(error);
+
     return res
       .status(500)
       .json(jsonResponse(false, "Something went wrong. Try again", null));
   }
 };
-
-
 
 
 
