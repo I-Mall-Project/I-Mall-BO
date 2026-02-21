@@ -10,127 +10,231 @@ import validateInput from "../../utils/validateInput.js";
 const module_name = "brand";
 
 //create brand
+// export const createBrand = async (req, res) => {
+//   try {
+//     return await prisma.$transaction(async (tx) => {
+//       let { name, isActive } = req.body;
+
+//       //   console.log(req.body);
+
+//       //validate input
+//       const inputValidation = validateInput([name], ["Name"]);
+
+//       if (inputValidation) {
+//         return res.status(400).json(jsonResponse(false, inputValidation, null));
+//       }
+
+//       //   if (serviceManufacturerId) {
+//       //     if (serviceManufacturerId.trim() === "") {
+//       //       serviceManufacturerId = undefined;
+//       //     }
+//       //   } else {
+//       //     serviceManufacturerId = undefined;
+//       //   }
+
+//       //   if (serviceModelId) {
+//       //     if (serviceModelId.trim() === "") {
+//       //       serviceModelId = undefined;
+//       //     }
+//       //   } else {
+//       //     serviceModelId = undefined;
+//       //   }
+
+//       //get user name for slugify
+//       //   const user = await tx.inspectionUser.findFirst({
+//       //     where: { id: req.user.parentId ? req.user.parentId : req.user.id },
+//       //   });
+
+//       //   if (!user)
+//       //     return res
+//       //       .status(404)
+//       //       .json(jsonResponse(false, "This user does not exist", null));
+
+//       //check if brand exists
+//       const brand = await tx.brand.findFirst({
+//         where: {
+//           slug: slugify(name),
+//         },
+//       });
+
+//       if (brand && brand?.slug === slugify(name))
+//         return res
+//           .status(409)
+//           .json(
+//             jsonResponse(
+//               false,
+//               `${name} already exists. Please change it`,
+//               null
+//             )
+//           );
+
+//       //if there is no image selected
+//       if (!req.file) {
+//         // return res
+//         //   .status(400)
+//         //   .json(jsonResponse(false, "Please select an image", null));
+//         //create brand
+//         const newBrand = await prisma.brand.create({
+//           data: {
+//             name,
+//             isActive: isActive === "true" ? true : false,
+//             slug: `${slugify(name)}`,
+//           },
+//         });
+
+//         if (newBrand) {
+//           return res
+//             .status(200)
+//             .json(jsonResponse(true, "Brand has been created", newBrand));
+//         }
+//       }
+
+//       //upload image
+//       // const imageUpload = await uploadImage(req.file);
+//       await uploadToCLoudinary(req.file, module_name, async (error, result) => {
+//         if (error) {
+//           console.error("error", error);
+//           return res.status(404).json(jsonResponse(false, error, null));
+//         }
+
+//         if (!result.secure_url) {
+//           return res
+//             .status(404)
+//             .json(
+//               jsonResponse(
+//                 false,
+//                 "Something went wrong while uploading image. Try again",
+//                 null
+//               )
+//             );
+//         }
+
+//         //create brand
+//         const newBrand = await prisma.brand.create({
+//           data: {
+//             name,
+//             isActive: isActive === "true" ? true : false,
+//             image: result.secure_url,
+//             slug: `${slugify(name)}`,
+//           },
+//         });
+
+//         if (newBrand) {
+//           return res
+//             .status(200)
+//             .json(jsonResponse(true, "Brand has been created", newBrand));
+//         }
+//       });
+//     });
+//   } catch (error) {
+//     console.log(error);
+//     return res.status(500).json(jsonResponse(false, error, null));
+//   }
+// };
+
+
+
 export const createBrand = async (req, res) => {
   try {
     return await prisma.$transaction(async (tx) => {
+
       let { name, isActive } = req.body;
 
-      //   console.log(req.body);
-
-      //validate input
+      // ✅ Validate input
       const inputValidation = validateInput([name], ["Name"]);
 
       if (inputValidation) {
-        return res.status(400).json(jsonResponse(false, inputValidation, null));
+        return res.status(400).json(
+          jsonResponse(false, inputValidation, null)
+        );
       }
 
-      //   if (serviceManufacturerId) {
-      //     if (serviceManufacturerId.trim() === "") {
-      //       serviceManufacturerId = undefined;
-      //     }
-      //   } else {
-      //     serviceManufacturerId = undefined;
-      //   }
-
-      //   if (serviceModelId) {
-      //     if (serviceModelId.trim() === "") {
-      //       serviceModelId = undefined;
-      //     }
-      //   } else {
-      //     serviceModelId = undefined;
-      //   }
-
-      //get user name for slugify
-      //   const user = await tx.inspectionUser.findFirst({
-      //     where: { id: req.user.parentId ? req.user.parentId : req.user.id },
-      //   });
-
-      //   if (!user)
-      //     return res
-      //       .status(404)
-      //       .json(jsonResponse(false, "This user does not exist", null));
-
-      //check if brand exists
-      const brand = await tx.brand.findFirst({
+      // ✅ Check duplicate brand
+      const existingBrand = await tx.brand.findFirst({
         where: {
-          slug: slugify(name),
+          name: {
+            equals: name,
+            mode: "insensitive", // ⭐ case insensitive match
+          },
         },
       });
 
-      if (brand && brand?.slug === slugify(name))
-        return res
-          .status(409)
-          .json(
-            jsonResponse(
-              false,
-              `${name} already exists. Please change it`,
-              null
-            )
-          );
-
-      //if there is no image selected
-      if (!req.file) {
-        // return res
-        //   .status(400)
-        //   .json(jsonResponse(false, "Please select an image", null));
-        //create brand
-        const newBrand = await prisma.brand.create({
-          data: {
-            name,
-            isActive: isActive === "true" ? true : false,
-            slug: `${slugify(name)}`,
-          },
-        });
-
-        if (newBrand) {
-          return res
-            .status(200)
-            .json(jsonResponse(true, "Brand has been created", newBrand));
-        }
+      if (existingBrand) {
+        return res.status(409).json(
+          jsonResponse(false, `${name} already exists`, null)
+        );
       }
 
-      //upload image
-      // const imageUpload = await uploadImage(req.file);
-      await uploadToCLoudinary(req.file, module_name, async (error, result) => {
-        if (error) {
-          console.error("error", error);
-          return res.status(404).json(jsonResponse(false, error, null));
-        }
+      // ⭐ Prepare brand data
+      const brandData = {
+        name,
+        isActive: isActive === "true",
+        slug: slugify(name),
+      };
 
-        if (!result.secure_url) {
-          return res
-            .status(404)
-            .json(
+      // ✅ If image uploaded
+      if (req.file) {
+        await uploadToCLoudinary(
+          req.file,
+          module_name,
+          async (error, result) => {
+
+            if (error) {
+              return res.status(500).json(
+                jsonResponse(false, error, null)
+              );
+            }
+
+            if (!result.secure_url) {
+              return res.status(500).json(
+                jsonResponse(
+                  false,
+                  "Image upload failed",
+                  null
+                )
+              );
+            }
+
+            brandData.image = result.secure_url;
+
+            const newBrand = await tx.brand.create({
+              data: brandData,
+            });
+
+            return res.status(200).json(
               jsonResponse(
-                false,
-                "Something went wrong while uploading image. Try again",
-                null
+                true,
+                "Brand created successfully",
+                newBrand
               )
             );
-        }
-
-        //create brand
-        const newBrand = await prisma.brand.create({
-          data: {
-            name,
-            isActive: isActive === "true" ? true : false,
-            image: result.secure_url,
-            slug: `${slugify(name)}`,
-          },
+          }
+        );
+      } else {
+        // ✅ Without image
+        const newBrand = await tx.brand.create({
+          data: brandData,
         });
 
-        if (newBrand) {
-          return res
-            .status(200)
-            .json(jsonResponse(true, "Brand has been created", newBrand));
-        }
-      });
+        return res.status(200).json(
+          jsonResponse(
+            true,
+            "Brand created successfully",
+            newBrand
+          )
+        );
+      }
     });
+
   } catch (error) {
     console.log(error);
-    return res.status(500).json(jsonResponse(false, error, null));
+
+    return res.status(500).json(
+      jsonResponse(false, error.message, null)
+    );
   }
 };
+
 
 //get all brands
 export const getBrands = async (req, res) => {

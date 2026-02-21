@@ -119,10 +119,90 @@ const module_name = "category";
 // };
 
 
+// export const createCategory = async (req, res) => {
+//   try {
+//     return await prisma.$transaction(async (tx) => {
+//       const { name, discount } = req.body; // new field
+
+//       // validate input
+//       const inputValidation = validateInput([name], ["Name"]);
+//       if (inputValidation) {
+//         return res.status(400).json(jsonResponse(false, inputValidation, null));
+//       }
+
+//       // get user
+//       const user = await tx.user.findFirst({
+//         where: { id: req.user.parentId ? req.user.parentId : req.user.id },
+//       });
+
+//       if (!user) {
+//         return res
+//           .status(404)
+//           .json(jsonResponse(false, "This user does not exist", null));
+//       }
+
+//       // check if category exists
+//       const category = await tx.category.findFirst({
+//         where: {
+//           userId: req.user.parentId ? req.user.parentId : req.user.id,
+//           name: name,
+//           isDeleted: false,
+//         },
+//       });
+
+//       if (
+//         category &&
+//         category.slug === `${slugify(user.name)}-${slugify(name)}`
+//       ) {
+//         return res
+//           .status(409)
+//           .json(jsonResponse(false, `${name} already exists.`, null));
+//       }
+
+//       // create category
+//       const newCategory = await tx.category.create({
+//         data: {
+//           userId: req.user.parentId ? req.user.parentId : req.user.id,
+//           name,
+//           discount: discount ? Number(discount) : 0, // save discount
+//           createdBy: req.user.id,
+//           slug: `${slugify(user.name)}-${slugify(name)}`,
+//         },
+//       });
+
+//       // if discount provided -> update all products under this category
+//       if (newCategory.discount > 0) {
+//         const products = await tx.product.findMany({
+//           where: { categoryId: newCategory.id },
+//         });
+
+//         for (let product of products) {
+//           const discountedPrice =
+//             product.price - (product.price * newCategory.discount) / 100;
+
+//           await tx.product.update({
+//             where: { id: product.id },
+//             data: { discountedPrice },
+//           });
+//         }
+//       }
+
+//       return res
+//         .status(200)
+//         .json(jsonResponse(true, "Category has been created", newCategory));
+//     });
+//   } catch (error) {
+//     console.log(error);
+//     return res.status(500).json(jsonResponse(false, error.message, null));
+//   }
+// };
+
+
 export const createCategory = async (req, res) => {
   try {
     return await prisma.$transaction(async (tx) => {
-      const { name, discount } = req.body; // new field
+
+      const { name, discount, brandId } = req.body; // ⭐ brandId added
 
       // validate input
       const inputValidation = validateInput([name], ["Name"]);
@@ -130,9 +210,24 @@ export const createCategory = async (req, res) => {
         return res.status(400).json(jsonResponse(false, inputValidation, null));
       }
 
+      // ⭐ Optional → Check Brand exists if brandId provided
+      if (brandId) {
+        const brandExist = await tx.brand.findFirst({
+          where: { id: brandId, isActive: true }
+        });
+
+        if (!brandExist) {
+          return res.status(404).json(
+            jsonResponse(false, "Brand not found", null)
+          );
+        }
+      }
+
       // get user
       const user = await tx.user.findFirst({
-        where: { id: req.user.parentId ? req.user.parentId : req.user.id },
+        where: {
+          id: req.user.parentId ? req.user.parentId : req.user.id,
+        },
       });
 
       if (!user) {
@@ -141,7 +236,7 @@ export const createCategory = async (req, res) => {
           .json(jsonResponse(false, "This user does not exist", null));
       }
 
-      // check if category exists
+      // check category exists
       const category = await tx.category.findFirst({
         where: {
           userId: req.user.parentId ? req.user.parentId : req.user.id,
@@ -159,18 +254,19 @@ export const createCategory = async (req, res) => {
           .json(jsonResponse(false, `${name} already exists.`, null));
       }
 
-      // create category
+      // ⭐ create category (BrandId added)
       const newCategory = await tx.category.create({
         data: {
           userId: req.user.parentId ? req.user.parentId : req.user.id,
           name,
-          discount: discount ? Number(discount) : 0, // save discount
+          brandId: brandId || null, // ⭐ store brand relation
+          discount: discount ? Number(discount) : 0,
           createdBy: req.user.id,
           slug: `${slugify(user.name)}-${slugify(name)}`,
         },
       });
 
-      // if discount provided -> update all products under this category
+      // discount logic
       if (newCategory.discount > 0) {
         const products = await tx.product.findMany({
           where: { categoryId: newCategory.id },
@@ -191,6 +287,7 @@ export const createCategory = async (req, res) => {
         .status(200)
         .json(jsonResponse(true, "Category has been created", newCategory));
     });
+
   } catch (error) {
     console.log(error);
     return res.status(500).json(jsonResponse(false, error.message, null));
@@ -199,74 +296,129 @@ export const createCategory = async (req, res) => {
 
 
 
-
-
-
-
-
-
-
-
-
-
-
 //get all categories
+// export const getCategories = async (req, res) => {
+//   if (req.user.roleName !== "super-admin") {
+//     getCategoriesByUser(req, res);
+//   } else {
+//     try {
+//       const categories = await prisma.category.findMany({
+//         where: {
+//           isDeleted: false,
+//           AND: [
+//             {
+//               name: {
+//                 contains: req.query.name,
+//                 mode: "insensitive",
+//               },
+//             },
+//           ],
+//         },
+//         include: { user: true },
+//         orderBy: {
+//           createdAt: "desc",
+//         },
+//         skip:
+//           req.query.limit && req.query.page
+//             ? parseInt(req.query.limit * (req.query.page - 1))
+//             : parseInt(defaultLimit() * (defaultPage() - 1)),
+//         take: req.query.limit
+//           ? parseInt(req.query.limit)
+//           : parseInt(defaultLimit()),
+//       });
+
+//       if (categories.length === 0)
+//         return res
+//           .status(200)
+//           .json(jsonResponse(true, "No category is available", null));
+
+//       if (categories) {
+//         return res
+//           .status(200)
+//           .json(
+//             jsonResponse(
+//               true,
+//               `${categories.length} categories found`,
+//               categories
+//             )
+//           );
+//       } else {
+//         return res
+//           .status(404)
+//           .json(jsonResponse(false, "Something went wrong. Try again", null));
+//       }
+//     } catch (error) {
+//       console.log(error);
+//       return res.status(500).json(jsonResponse(false, error, null));
+//     }
+//   }
+// };
+
 export const getCategories = async (req, res) => {
   if (req.user.roleName !== "super-admin") {
-    getCategoriesByUser(req, res);
-  } else {
-    try {
-      const categories = await prisma.category.findMany({
-        where: {
-          isDeleted: false,
-          AND: [
-            {
-              name: {
-                contains: req.query.name,
-                mode: "insensitive",
-              },
+    return getCategoriesByUser(req, res);
+  }
+
+  try {
+    const categories = await prisma.category.findMany({
+      where: {
+        isDeleted: false,
+
+        AND: [
+          {
+            name: {
+              contains: req.query.name || "",
+              mode: "insensitive",
             },
-          ],
-        },
-        include: { user: true },
-        orderBy: {
-          createdAt: "desc",
-        },
-        skip:
-          req.query.limit && req.query.page
-            ? parseInt(req.query.limit * (req.query.page - 1))
-            : parseInt(defaultLimit() * (defaultPage() - 1)),
-        take: req.query.limit
-          ? parseInt(req.query.limit)
-          : parseInt(defaultLimit()),
-      });
+          },
+        ],
+      },
 
-      if (categories.length === 0)
-        return res
-          .status(200)
-          .json(jsonResponse(true, "No category is available", null));
+      // ⭐ Include relations (Important)
+      include: {
+        user: true,
+        brand: true,   // ⭐ Added brand relation
+      },
 
-      if (categories) {
-        return res
-          .status(200)
-          .json(
-            jsonResponse(
-              true,
-              `${categories.length} categories found`,
-              categories
-            )
-          );
-      } else {
-        return res
-          .status(404)
-          .json(jsonResponse(false, "Something went wrong. Try again", null));
-      }
-    } catch (error) {
-      console.log(error);
-      return res.status(500).json(jsonResponse(false, error, null));
+      orderBy: {
+        createdAt: "desc",
+      },
+
+      // ⭐ Pagination safe parsing
+      skip: req.query.limit && req.query.page
+        ? Number(req.query.limit) * (Number(req.query.page) - 1)
+        : Number(defaultLimit() * (defaultPage() - 1)),
+
+      take: req.query.limit
+        ? Number(req.query.limit)
+        : Number(defaultLimit()),
+    });
+
+    if (!categories.length) {
+      return res
+        .status(200)
+        .json(jsonResponse(true, "No category is available", null));
     }
+
+    return res.status(200).json(
+      jsonResponse(
+        true,
+        `${categories.length} categories found`,
+        categories
+      )
+    );
+
+  } catch (error) {
+    console.log(error);
+
+    return res
+      .status(500)
+      .json(jsonResponse(false, error.message, null));
   }
 };
+
+
+
 
 //get all categories by user
 export const getCategoriesByUser = async (req, res) => {

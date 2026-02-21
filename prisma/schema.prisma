@@ -130,8 +130,10 @@ model Category {
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
   discount       Float?           @default(0)
+  brandId        String?
   campaigns      Campaign[]
   user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  brand          Brand?           @relation(fields: [brandId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_brand")
   products       Product[]
   subcategory    Subcategory[]
   subsubcategory Subsubcategory[]
@@ -188,13 +190,14 @@ model Campaign {
 }
 
 model Brand {
-  id        String    @id @default(uuid())
-  name      String    @unique
+  id        String     @id @default(uuid())
+  name      String     @unique
   image     String?
   slug      String
-  isActive  Boolean   @default(true)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  isActive  Boolean    @default(true)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  category  Category[]
   product   Product[]
 }
 
@@ -404,7 +407,7 @@ model Contact {
   id             String   @id @default(uuid())
   name           String
   email          String
-  subject        String?  // <-- optional now
+  subject        String?
   message        String
   isActive       Boolean  @default(true)
   createdAt      DateTime @default(now())
@@ -414,7 +417,6 @@ model Contact {
   connectionType String?
   packageChoice  String?
 }
-
 
 enum OrderStatus {
   PENDING
