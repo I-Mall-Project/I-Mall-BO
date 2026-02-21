@@ -657,32 +657,150 @@ export const getCategory = async (req, res) => {
 //   }
 // };
 
-// Update category
+// // Update category
+// export const updateCategory = async (req, res) => {
+//   try {
+//     const { name, discount } = req.body;
+
+//     // Validate input
+//     const inputValidation = validateInput([name], ["Name"]);
+//     if (inputValidation) return res.status(400).json(jsonResponse(false, inputValidation, null));
+
+//     // Find category and user
+//     const findCategory = await prisma.category.findUnique({ where: { id: req.params.id } });
+//     if (!findCategory) return res.status(404).json(jsonResponse(false, "Category not found", null));
+
+//     const user = await prisma.user.findUnique({ where: { id: findCategory.userId } });
+//     if (!user) return res.status(404).json(jsonResponse(false, "User not found", null));
+
+//     // Check name conflict
+//     if (name && name !== findCategory.name) {
+//       const existingCategory = await prisma.category.findFirst({
+//         where: { userId: req.user.parentId ?? req.user.id, name, isDeleted: false }
+//       });
+//       if (existingCategory) return res.status(409).json(jsonResponse(false, `${name} already exists`, null));
+//     }
+
+//     // Upload image if provided
+//     let imageUrl = findCategory.image;
+//     if (req.file) {
+//       const result = await new Promise((resolve, reject) => {
+//         uploadToCLoudinary(req.file, "category", (err, result) => {
+//           if (err) reject(err);
+//           else resolve(result);
+//         });
+//       });
+//       imageUrl = result.secure_url;
+//       if (findCategory.image) await deleteFromCloudinary(findCategory.image, () => {});
+//     }
+
+//     // Update category only in a transaction
+//     const updatedCategory = await prisma.$transaction(async (tx) => {
+//       return tx.category.update({
+//         where: { id: req.params.id },
+//         data: {
+//           name,
+//           discount: discount ? Number(discount) : 0,
+//           updatedBy: req.user.id,
+//           image: imageUrl,
+//           slug: name ? `${slugify(user.name)}-${slugify(name)}` : findCategory.slug,
+//         },
+//       });
+//     });
+
+//     // **Update all product attributes outside the transaction**
+//     if (updatedCategory.discount !== undefined) {
+//       const products = await prisma.product.findMany({
+//         where: { categoryId: updatedCategory.id },
+//         include: { productAttributes: true },
+//       });
+
+//       for (let product of products) {
+//         const updates = product.productAttributes.map(attr => {
+//           const retailPrice = Number(attr.retailPrice);
+//           const discountPercent = updatedCategory.discount;
+//           const discountPrice = (retailPrice * discountPercent) / 100;
+//           const discountedRetailPrice = retailPrice - discountPrice;
+
+//           return prisma.productAttribute.update({
+//             where: { id: attr.id },
+//             data: { discountPercent, discountPrice, discountedRetailPrice },
+//           });
+//         });
+
+//         // Execute updates in parallel
+//         await Promise.all(updates);
+//       }
+//     }
+
+//     return res.status(200).json(jsonResponse(true, "Category has been updated", updatedCategory));
+//   } catch (error) {
+//     console.log(error);
+//     return res.status(500).json(jsonResponse(false, error.message, null));
+//   }
+// };
+
+
 export const updateCategory = async (req, res) => {
   try {
-    const { name, discount } = req.body;
+    const { name, discount, brandId, isActive } = req.body;
 
-    // Validate input
+    // ✅ Validate input
     const inputValidation = validateInput([name], ["Name"]);
-    if (inputValidation) return res.status(400).json(jsonResponse(false, inputValidation, null));
+    if (inputValidation)
+      return res.status(400).json(jsonResponse(false, inputValidation, null));
 
-    // Find category and user
-    const findCategory = await prisma.category.findUnique({ where: { id: req.params.id } });
-    if (!findCategory) return res.status(404).json(jsonResponse(false, "Category not found", null));
+    // ✅ Find category
+    const findCategory = await prisma.category.findUnique({
+      where: { id: req.params.id },
+    });
 
-    const user = await prisma.user.findUnique({ where: { id: findCategory.userId } });
-    if (!user) return res.status(404).json(jsonResponse(false, "User not found", null));
+    if (!findCategory)
+      return res
+        .status(404)
+        .json(jsonResponse(false, "Category not found", null));
 
-    // Check name conflict
-    if (name && name !== findCategory.name) {
-      const existingCategory = await prisma.category.findFirst({
-        where: { userId: req.user.parentId ?? req.user.id, name, isDeleted: false }
+    // ✅ Find user for slug generation
+    const user = await prisma.user.findUnique({
+      where: { id: findCategory.userId },
+    });
+
+    if (!user)
+      return res
+        .status(404)
+        .json(jsonResponse(false, "User not found", null));
+
+    // ✅ Brand validation (if brandId provided)
+    if (brandId) {
+      const brandExist = await prisma.brand.findUnique({
+        where: { id: brandId },
       });
-      if (existingCategory) return res.status(409).json(jsonResponse(false, `${name} already exists`, null));
+
+      if (!brandExist)
+        return res
+          .status(404)
+          .json(jsonResponse(false, "Brand not found", null));
     }
 
-    // Upload image if provided
+    // ✅ Duplicate name check
+    if (name && name !== findCategory.name) {
+      const existingCategory = await prisma.category.findFirst({
+        where: {
+          userId: req.user.parentId ?? req.user.id,
+          name,
+          isDeleted: false,
+        },
+      });
+
+      if (existingCategory)
+        return res
+          .status(409)
+          .json(jsonResponse(false, `${name} already exists`, null));
+    }
+
+    // ✅ Image upload handling
     let imageUrl = findCategory.image;
+
     if (req.file) {
       const result = await new Promise((resolve, reject) => {
         uploadToCLoudinary(req.file, "category", (err, result) => {
@@ -690,53 +808,77 @@ export const updateCategory = async (req, res) => {
           else resolve(result);
         });
       });
+
       imageUrl = result.secure_url;
-      if (findCategory.image) await deleteFromCloudinary(findCategory.image, () => {});
+
+      if (findCategory.image) {
+        await deleteFromCloudinary(findCategory.image, () => {});
+      }
     }
 
-    // Update category only in a transaction
-    const updatedCategory = await prisma.$transaction(async (tx) => {
-      return tx.category.update({
-        where: { id: req.params.id },
-        data: {
-          name,
-          discount: discount ? Number(discount) : 0,
-          updatedBy: req.user.id,
-          image: imageUrl,
-          slug: name ? `${slugify(user.name)}-${slugify(name)}` : findCategory.slug,
-        },
-      });
+    // ✅ Update category
+    const updatedCategory = await prisma.category.update({
+      where: { id: req.params.id },
+      data: {
+        name,
+        brandId: brandId || null, // ⭐ Added brand relation
+        discount: discount ? Number(discount) : 0,
+        isActive: isActive === "false" ? false : true,
+        updatedBy: req.user.id,
+        image: imageUrl,
+
+        slug: name
+          ? `${slugify(user.name)}-${slugify(name)}`
+          : findCategory.slug,
+      },
     });
 
-    // **Update all product attributes outside the transaction**
+    // ✅ Update product attribute pricing if discount changed
     if (updatedCategory.discount !== undefined) {
       const products = await prisma.product.findMany({
         where: { categoryId: updatedCategory.id },
         include: { productAttributes: true },
       });
 
-      for (let product of products) {
-        const updates = product.productAttributes.map(attr => {
-          const retailPrice = Number(attr.retailPrice);
-          const discountPercent = updatedCategory.discount;
-          const discountPrice = (retailPrice * discountPercent) / 100;
-          const discountedRetailPrice = retailPrice - discountPrice;
+      await Promise.all(
+        products.map(async (product) => {
+          return Promise.all(
+            product.productAttributes.map(async (attr) => {
+              const retailPrice = Number(attr.retailPrice);
+              const discountPercent = updatedCategory.discount;
 
-          return prisma.productAttribute.update({
-            where: { id: attr.id },
-            data: { discountPercent, discountPrice, discountedRetailPrice },
-          });
-        });
+              const discountPrice =
+                (retailPrice * discountPercent) / 100;
 
-        // Execute updates in parallel
-        await Promise.all(updates);
-      }
+              const discountedRetailPrice =
+                retailPrice - discountPrice;
+
+              return prisma.productAttribute.update({
+                where: { id: attr.id },
+                data: {
+                  discountPercent,
+                  discountPrice,
+                  discountedRetailPrice,
+                },
+              });
+            })
+          );
+        })
+      );
     }
 
-    return res.status(200).json(jsonResponse(true, "Category has been updated", updatedCategory));
+    return res
+      .status(200)
+      .json(
+        jsonResponse(true, "Category has been updated", updatedCategory)
+      );
+
   } catch (error) {
     console.log(error);
-    return res.status(500).json(jsonResponse(false, error.message, null));
+
+    return res
+      .status(500)
+      .json(jsonResponse(false, error.message, null));
   }
 };
 
