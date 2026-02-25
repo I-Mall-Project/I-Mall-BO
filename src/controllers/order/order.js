@@ -47,7 +47,7 @@ const sendEmail = async (to, subject, html) => {
   });
 
   await transporter.sendMail({
-    from: `"Imall" <${GMAIL_ID}>`,
+    from: `"Gift Shop" <${GMAIL_ID}>`,
     to,
     subject,
     html,
@@ -57,7 +57,6 @@ const sendEmail = async (to, subject, html) => {
 
 export const createOrder = async (req, res) => {
   try {
-
     const {
       userId,
       couponId,
@@ -68,112 +67,43 @@ export const createOrder = async (req, res) => {
       customerEmail,
       customerCity,
       customerPostalCode,
+      invoiceNumber,
       paymentMethod,
       deliveryChargeInside,
       deliveryChargeOutside,
       orderItems,
     } = req.body;
 
-    // Validation
+    // Validate input
     const inputValidation = validateInput(
-      [customerName, customerPhone, customerAddress, paymentMethod],
-      ["Name", "Phone", "Shipping Address", "Payment Method"]
+      [customerName, customerPhone, customerAddress, invoiceNumber, paymentMethod],
+      ["Name", "Phone", "Shipping Address", "Invoice", "Payment Method"]
     );
-
     if (inputValidation) {
       return res.status(400).json(jsonResponse(false, inputValidation, null));
     }
 
     if (!orderItems || orderItems.length === 0) {
-      return res.status(400).json(
-        jsonResponse(false, "Please select at least 1 item", null)
-      );
+      return res.status(400).json(jsonResponse(false, "Please select at least 1 item", null));
     }
 
-    // ⭐ Invoice Generator
-    const generateInvoiceNumber = async (tx, brandId, productId) => {
-
-      const date = new Date();
-
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, "0");
-      const day = String(date.getDate()).padStart(2, "0");
-
-      const prefix = `${year}${month}${day}${brandId}${productId}`;
-
-      const lastOrder = await tx.order.findFirst({
-        where: {
-          invoiceNumber: {
-            startsWith: prefix
-          }
-        },
-        orderBy: {
-          createdAt: "desc"
-        }
-      });
-
-      let seq = 1;
-
-      if (lastOrder?.invoiceNumber) {
-        const lastSeq = lastOrder.invoiceNumber.slice(prefix.length);
-        seq = parseInt(lastSeq) + 1;
-      }
-
-      return `${prefix}${String(seq).padStart(4, "0")}`;
-    };
-
-    // Transaction
+    // ✅ Only DB transaction
     const newOrder = await prisma.$transaction(async (tx) => {
-
       let totalItems = 0;
       let subtotal = 0;
       let subtotalCost = 0;
       let newOrderItems = [];
 
-      const firstItem = orderItems[0];
-
-      const product = await tx.product.findFirst({
-        where: {
-          id: firstItem.productId,
-          isDeleted: false,
-          isActive: true
-        },
-        include: {
-          brand: true
-        }
-      });
-
-      if (!product) throw new Error("Product not found");
-
-      const invoiceNumber = await generateInvoiceNumber(
-        tx,
-        product.brandId,
-        product.id
-      );
-
-      // Order item calculation
       for (const item of orderItems) {
-
-        const product = await tx.product.findFirst({
-          where: { id: item.productId }
-        });
-
-        const productAttribute = await tx.productAttribute.findFirst({
-          where: {
-            id: item.productAttributeId,
-            isDeleted: false
-          }
-        });
+        const product = await tx.product.findFirst({ where: { id: item.productId, isDeleted: false, isActive: true } });
+        const productAttribute = await tx.productAttribute.findFirst({ where: { id: item.productAttributeId, isDeleted: false } });
 
         if (!product || !productAttribute) {
           throw new Error("Product or attribute does not exist");
         }
 
-        const totalPrice =
-          item.quantity * productAttribute.discountedRetailPrice;
-
-        const totalCostPrice =
-          item.quantity * productAttribute.costPrice;
+        const totalPrice = item.quantity * productAttribute.discountedRetailPrice;
+        const totalCostPrice = item.quantity * productAttribute.costPrice;
 
         newOrderItems.push({
           ...item,
@@ -195,22 +125,16 @@ export const createOrder = async (req, res) => {
       }
 
       const coupon = couponId
-        ? await tx.coupon.findFirst({
-            where: { id: couponId, isActive: true }
-          })
+        ? await tx.coupon.findFirst({ where: { id: couponId, isActive: true } })
         : null;
 
-      const deliveryCharge =
-        deliveryChargeInside ?? deliveryChargeOutside ?? 0;
-
-      const finalSubtotal =
-        subtotal + deliveryCharge - (coupon?.discountAmount ?? 0);
+      const deliveryCharge = deliveryChargeInside ?? deliveryChargeOutside ?? 0;
+      const finalSubtotal = subtotal + deliveryCharge - (coupon?.discountAmount ?? 0);
 
       const order = await tx.order.create({
         data: {
           userId,
           couponId,
-          invoiceNumber,
           customerName,
           customerPhone,
           customerAddress,
@@ -218,31 +142,23 @@ export const createOrder = async (req, res) => {
           customerEmail,
           customerCity,
           customerPostalCode,
+          invoiceNumber,
           totalItems,
           subtotalCost,
           subtotal: finalSubtotal,
           paymentMethod,
           deliveryChargeInside: deliveryChargeInside ?? null,
           deliveryChargeOutside: deliveryChargeOutside ?? null,
-
-          orderItems: {
-            create: newOrderItems
-          }
+          orderItems: { create: newOrderItems },
         },
-        include: {
-          orderItems: true
-        }
+        include: { orderItems: true },
       });
 
       // Reduce stock
       for (const item of orderItems) {
         await tx.productAttribute.update({
           where: { id: item.productAttributeId },
-          data: {
-            stockAmount: {
-              decrement: item.quantity
-            }
-          }
+          data: { stockAmount: { decrement: item.quantity } },
         });
       }
 
