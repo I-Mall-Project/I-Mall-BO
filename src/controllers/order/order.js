@@ -55,6 +55,345 @@ const sendEmail = async (to, subject, html) => {
 };
 
 
+const generateInvoiceNumber = async (tx, brandID, productCode) => {
+
+  const now = new Date();
+
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+
+  const prefix = `${year}${month}${day}${brandID}${productCode}`;
+
+  const lastOrder = await tx.order.findFirst({
+    where: {
+      invoiceNumber: {
+        startsWith: prefix
+      }
+    },
+    orderBy: {
+      createdAt: "desc"
+    }
+  });
+
+  let sequence = 1;
+
+  if (lastOrder?.invoiceNumber) {
+    const lastSeq = lastOrder.invoiceNumber.slice(prefix.length);
+    sequence = parseInt(lastSeq) + 1;
+  }
+
+  return `${prefix}${String(sequence).padStart(4, "0")}`;
+};
+
+
+
+
+// export const createOrder = async (req, res) => {
+//   try {
+//     const {
+//       userId,
+//       couponId,
+//       customerName,
+//       customerPhone,
+//       customerAddress,
+//       customerBillingAddress,
+//       customerEmail,
+//       customerCity,
+//       customerPostalCode,
+//       invoiceNumber,
+//       paymentMethod,
+//       deliveryChargeInside,
+//       deliveryChargeOutside,
+//       orderItems,
+//     } = req.body;
+
+//     // Validate input
+//     const inputValidation = validateInput(
+//       [customerName, customerPhone, customerAddress, invoiceNumber, paymentMethod],
+//       ["Name", "Phone", "Shipping Address", "Invoice", "Payment Method"]
+//     );
+//     if (inputValidation) {
+//       return res.status(400).json(jsonResponse(false, inputValidation, null));
+//     }
+
+//     if (!orderItems || orderItems.length === 0) {
+//       return res.status(400).json(jsonResponse(false, "Please select at least 1 item", null));
+//     }
+
+//     // ✅ Only DB transaction
+//     const newOrder = await prisma.$transaction(async (tx) => {
+//       let totalItems = 0;
+//       let subtotal = 0;
+//       let subtotalCost = 0;
+//       let newOrderItems = [];
+
+//       for (const item of orderItems) {
+//         const product = await tx.product.findFirst({ where: { id: item.productId, isDeleted: false, isActive: true } });
+//         const productAttribute = await tx.productAttribute.findFirst({ where: { id: item.productAttributeId, isDeleted: false } });
+
+//         if (!product || !productAttribute) {
+//           throw new Error("Product or attribute does not exist");
+//         }
+
+//         const totalPrice = item.quantity * productAttribute.discountedRetailPrice;
+//         const totalCostPrice = item.quantity * productAttribute.costPrice;
+
+//         newOrderItems.push({
+//           ...item,
+//           name: product.name,
+//           size: productAttribute.size,
+//           costPrice: productAttribute.costPrice,
+//           retailPrice: productAttribute.retailPrice,
+//           discountPercent: productAttribute.discountPercent,
+//           discountPrice: productAttribute.discountPrice,
+//           discountedRetailPrice: productAttribute.discountedRetailPrice,
+//           totalCostPrice,
+//           totalPrice,
+//           quantity: item.quantity,
+//         });
+
+//         totalItems += item.quantity;
+//         subtotal += totalPrice;
+//         subtotalCost += totalCostPrice;
+//       }
+
+//       const coupon = couponId
+//         ? await tx.coupon.findFirst({ where: { id: couponId, isActive: true } })
+//         : null;
+
+//       const deliveryCharge = deliveryChargeInside ?? deliveryChargeOutside ?? 0;
+//       const finalSubtotal = subtotal + deliveryCharge - (coupon?.discountAmount ?? 0);
+
+//       const order = await tx.order.create({
+//         data: {
+//           userId,
+//           couponId,
+//           customerName,
+//           customerPhone,
+//           customerAddress,
+//           customerBillingAddress,
+//           customerEmail,
+//           customerCity,
+//           customerPostalCode,
+//           invoiceNumber,
+//           totalItems,
+//           subtotalCost,
+//           subtotal: finalSubtotal,
+//           paymentMethod,
+//           deliveryChargeInside: deliveryChargeInside ?? null,
+//           deliveryChargeOutside: deliveryChargeOutside ?? null,
+//           orderItems: { create: newOrderItems },
+//         },
+//         include: { orderItems: true },
+//       });
+
+//       // Reduce stock
+//       for (const item of orderItems) {
+//         await tx.productAttribute.update({
+//           where: { id: item.productAttributeId },
+//           data: { stockAmount: { decrement: item.quantity } },
+//         });
+//       }
+
+//       return order;
+//     });
+
+//     // ✅ Call sendEmail outside transaction
+// const emailBody = `
+//   <div style="
+//     max-width: 650px;
+//     margin: auto;
+//     padding: 30px;
+//     background: #ffffff;
+//     border-radius: 16px;
+//     border: 3px solid #ff7f50;
+//     box-shadow: 0 8px 24px rgba(255, 127, 80, 0.15);
+//   ">
+    
+//     <!-- Header with Gift Icon -->
+//     <div style="text-align: center; margin-bottom: 25px;">
+//       <div style="
+//         font-size: 48px;
+//         margin-bottom: 10px;
+//       ">🎁</div>
+//       <h2 style="
+//         font-size: 32px;
+//         margin: 0;
+//         font-weight: 700;
+//         color: #ff7f50;
+//         font-family: 'Georgia', serif;
+//       ">
+//         GIFT SHOP
+//       </h2>
+//       <p style="
+//         margin: 5px 0 0 0;
+//         font-size: 14px;
+//         color: #ff9966;
+//         letter-spacing: 2px;
+//         text-transform: uppercase;
+//       ">Order Confirmation</p>
+//     </div>
+
+//     <!-- Greeting -->
+//     <p style="font-size: 17px; color: #333; line-height: 1.6;">
+//       Dear <strong style="color:#ff7f50;">${customerName}</strong>,
+//     </p>
+
+//     <p style="font-size: 16px; color: #555; line-height: 1.7;">
+//       Thank you for choosing 
+//       <strong style="color:#ff7f50;">GIFT SHOP</strong>! 
+//       Your order has been confirmed and is being prepared with care. 
+//       We're excited to help you spread joy! 🎉
+//     </p>
+
+//     <!-- Order Details Table -->
+//     <table style="
+//       width: 100%;
+//       border-collapse: collapse;
+//       margin-top: 25px;
+//       background: linear-gradient(135deg, #fff9f5 0%, #ffe8dc 100%);
+//       border-radius: 12px;
+//       overflow: hidden;
+//       border: 2px solid #ffb088;
+//     ">
+//       <tr>
+//         <td style="padding: 14px 18px; font-weight: 600; color:#ff7f50; font-size: 15px;">
+//           📋 Invoice Number:
+//         </td>
+//         <td style="padding: 14px 18px; color:#333; font-weight: 500;">
+//           ${invoiceNumber}
+//         </td>
+//       </tr>
+//       <tr style="background: rgba(255, 127, 80, 0.05);">
+//         <td style="padding: 14px 18px; font-weight: 600; color:#ff7f50; font-size: 15px;">
+//           📦 Total Items:
+//         </td>
+//         <td style="padding: 14px 18px; color:#333; font-weight: 500;">
+//           ${newOrder.totalItems}
+//         </td>
+//       </tr>
+//       <tr>
+//         <td style="padding: 14px 18px; font-weight: 600; color:#ff7f50; font-size: 15px;">
+//           💰 Total Amount:
+//         </td>
+//         <td style="padding: 14px 18px; color:#333; font-weight: 500;">
+//           ${newOrder.subtotal} TK
+//         </td>
+//       </tr>
+//       <tr style="background: rgba(255, 127, 80, 0.05);">
+//         <td style="padding: 14px 18px; font-weight: 600; color:#ff7f50; font-size: 15px;">
+//           💳 Payment Method:
+//         </td>
+//         <td style="padding: 14px 18px; color:#333; font-weight: 500;">
+//           ${paymentMethod}
+//         </td>
+//       </tr>
+//     </table>
+
+//     <!-- Products Section -->
+//     <div style="
+//       margin-top: 30px;
+//       padding: 20px;
+//       background: #fff9f5;
+//       border-radius: 10px;
+//       border-left: 4px solid #ff7f50;
+//     ">
+//       <h3 style="
+//         color: #ff7f50;
+//         margin: 0 0 15px 0;
+//         font-size: 20px;
+//         font-weight: 700;
+//         font-family: 'Georgia', serif;
+//       ">
+//         🎁 Your Gift Selection
+//       </h3>
+
+//       <ul style="
+//         font-size: 16px; 
+//         color: #444; 
+//         padding-left: 20px;
+//         line-height: 1.8;
+//         margin: 0;
+//       ">
+//         ${newOrder.orderItems
+//           .map(item => `<li style="margin-bottom: 8px; color: #555;">
+//             <span style="color: #ff7f50; font-weight: 600;">✨</span> ${item.name}
+//           </li>`)
+//           .join("")}
+//       </ul>
+//     </div>
+
+//     <!-- Divider -->
+//     <hr style="border: 0; border-top: 2px solid #ffe8dc; margin: 30px 0;">
+
+//     <!-- Contact Information -->
+//     <div style="
+//       background: linear-gradient(135deg, #fff5f0 0%, #ffe8dc 100%);
+//       padding: 20px;
+//       border-radius: 10px;
+//       text-align: center;
+//     ">
+//       <p style="font-size: 18px; color: #ff7f50; font-weight: 700; margin: 0 0 15px 0; font-family: 'Georgia', serif;">
+//         GIFT SHOP
+//       </p>
+//       <p style="font-size: 14px; color: #666; line-height: 1.7; margin: 0;">
+//         📍 Dhaka Outlet, Bailey Road, AQP Shopping Mall<br/>
+//         📞 Phone: 01748399860<br/>
+//         🆘 Helpline: 01748399860<br/>
+//         ✉️ Email: 
+//         <a href="mailto:giftshop@gmail.com" style="color: #ff7f50; text-decoration:none; font-weight: 600;">
+//           giftshop@gmail.com
+//         </a>
+//       </p>
+//     </div>
+
+//     <!-- Footer Message -->
+//     <div style="
+//       text-align: center;
+//       margin-top: 30px;
+//       padding: 20px;
+//       background: #ff7f50;
+//       border-radius: 10px;
+//     ">
+//       <p style="
+//         font-size: 16px;
+//         margin: 0;
+//         color: #ffffff;
+//         font-weight: 600;
+//         letter-spacing: 1px;
+//       ">
+//         🎊 Thank you for making someone's day special! 🎊
+//       </p>
+//       <p style="
+//         font-size: 13px;
+//         margin: 8px 0 0 0;
+//         color: #ffe8dc;
+//       ">
+//         Every gift tells a story. We're honored to be part of yours.
+//       </p>
+//     </div>
+
+//   </div>
+
+// `;
+
+// await sendEmail(customerEmail, `Order Invoice #${invoiceNumber}`, emailBody);
+// await sendEmail("shamimrocky801@yahoo.com", `New Order Received #${invoiceNumber}`, emailBody);
+
+// return res.status(200).json(jsonResponse(true, "Your order has been placed successfully", newOrder));
+
+
+//   } catch (error) {
+//     console.log("ORDER ERROR:", error);
+//     return res.status(500).json(jsonResponse(false, error.message || error, null));
+//   }
+// };
+
+
+
+
+
 export const createOrder = async (req, res) => {
   try {
     const {
@@ -67,53 +406,97 @@ export const createOrder = async (req, res) => {
       customerEmail,
       customerCity,
       customerPostalCode,
-      invoiceNumber,
       paymentMethod,
       deliveryChargeInside,
       deliveryChargeOutside,
       orderItems,
     } = req.body;
 
-    // Validate input
     const inputValidation = validateInput(
-      [customerName, customerPhone, customerAddress, invoiceNumber, paymentMethod],
-      ["Name", "Phone", "Shipping Address", "Invoice", "Payment Method"]
+      [customerName, customerPhone, customerAddress, paymentMethod],
+      ["Name", "Phone", "Shipping Address", "Payment Method"]
     );
+
     if (inputValidation) {
       return res.status(400).json(jsonResponse(false, inputValidation, null));
     }
 
     if (!orderItems || orderItems.length === 0) {
-      return res.status(400).json(jsonResponse(false, "Please select at least 1 item", null));
+      return res.status(400).json(
+        jsonResponse(false, "Please select at least 1 item", null)
+      );
     }
 
-    // ✅ Only DB transaction
     const newOrder = await prisma.$transaction(async (tx) => {
+
       let totalItems = 0;
       let subtotal = 0;
       let subtotalCost = 0;
       let newOrderItems = [];
 
+      // ⭐ First product for invoice generation
+      const firstItem = orderItems[0];
+
+      const productInfo = await tx.product.findFirst({
+        where: {
+          id: firstItem.productId,
+          isDeleted: false,
+          isActive: true,
+        },
+        include: {
+          brand: true,
+        },
+      });
+
+      if (!productInfo) throw new Error("Product not found");
+
+      const invoiceNumber = await generateInvoiceNumber(
+        tx,
+        productInfo.brand?.brandID || "00",
+        productInfo.productCode || "0000"
+      );
+
       for (const item of orderItems) {
-        const product = await tx.product.findFirst({ where: { id: item.productId, isDeleted: false, isActive: true } });
-        const productAttribute = await tx.productAttribute.findFirst({ where: { id: item.productAttributeId, isDeleted: false } });
+
+        const product = await tx.product.findFirst({
+          where: {
+            id: item.productId,
+            isDeleted: false,
+            isActive: true,
+          },
+          include: {
+            brand: true,
+          },
+        });
+
+        const productAttribute = await tx.productAttribute.findFirst({
+          where: {
+            id: item.productAttributeId,
+            isDeleted: false,
+          },
+        });
 
         if (!product || !productAttribute) {
           throw new Error("Product or attribute does not exist");
         }
 
-        const totalPrice = item.quantity * productAttribute.discountedRetailPrice;
-        const totalCostPrice = item.quantity * productAttribute.costPrice;
+        const totalPrice =
+          item.quantity * productAttribute.discountedRetailPrice;
+
+        const totalCostPrice =
+          item.quantity * productAttribute.costPrice;
 
         newOrderItems.push({
-          ...item,
+          productId: item.productId,
+          productAttributeId: item.productAttributeId,
           name: product.name,
           size: productAttribute.size,
           costPrice: productAttribute.costPrice,
           retailPrice: productAttribute.retailPrice,
           discountPercent: productAttribute.discountPercent,
           discountPrice: productAttribute.discountPrice,
-          discountedRetailPrice: productAttribute.discountedRetailPrice,
+          discountedRetailPrice:
+            productAttribute.discountedRetailPrice,
           totalCostPrice,
           totalPrice,
           quantity: item.quantity,
@@ -125,11 +508,16 @@ export const createOrder = async (req, res) => {
       }
 
       const coupon = couponId
-        ? await tx.coupon.findFirst({ where: { id: couponId, isActive: true } })
+        ? await tx.coupon.findFirst({
+            where: { id: couponId, isActive: true },
+          })
         : null;
 
-      const deliveryCharge = deliveryChargeInside ?? deliveryChargeOutside ?? 0;
-      const finalSubtotal = subtotal + deliveryCharge - (coupon?.discountAmount ?? 0);
+      const deliveryCharge =
+        deliveryChargeInside ?? deliveryChargeOutside ?? 0;
+
+      const finalSubtotal =
+        subtotal + deliveryCharge - (coupon?.discountAmount ?? 0);
 
       const order = await tx.order.create({
         data: {
@@ -149,216 +537,45 @@ export const createOrder = async (req, res) => {
           paymentMethod,
           deliveryChargeInside: deliveryChargeInside ?? null,
           deliveryChargeOutside: deliveryChargeOutside ?? null,
-          orderItems: { create: newOrderItems },
+          orderItems: {
+            create: newOrderItems,
+          },
         },
-        include: { orderItems: true },
+        include: {
+          orderItems: true,
+        },
       });
 
       // Reduce stock
       for (const item of orderItems) {
         await tx.productAttribute.update({
           where: { id: item.productAttributeId },
-          data: { stockAmount: { decrement: item.quantity } },
+          data: {
+            stockAmount: {
+              decrement: item.quantity,
+            },
+          },
         });
       }
 
       return order;
     });
 
-    // ✅ Call sendEmail outside transaction
-const emailBody = `
-  <div style="
-    max-width: 650px;
-    margin: auto;
-    padding: 30px;
-    background: #ffffff;
-    border-radius: 16px;
-    border: 3px solid #ff7f50;
-    box-shadow: 0 8px 24px rgba(255, 127, 80, 0.15);
-  ">
-    
-    <!-- Header with Gift Icon -->
-    <div style="text-align: center; margin-bottom: 25px;">
-      <div style="
-        font-size: 48px;
-        margin-bottom: 10px;
-      ">🎁</div>
-      <h2 style="
-        font-size: 32px;
-        margin: 0;
-        font-weight: 700;
-        color: #ff7f50;
-        font-family: 'Georgia', serif;
-      ">
-        GIFT SHOP
-      </h2>
-      <p style="
-        margin: 5px 0 0 0;
-        font-size: 14px;
-        color: #ff9966;
-        letter-spacing: 2px;
-        text-transform: uppercase;
-      ">Order Confirmation</p>
-    </div>
-
-    <!-- Greeting -->
-    <p style="font-size: 17px; color: #333; line-height: 1.6;">
-      Dear <strong style="color:#ff7f50;">${customerName}</strong>,
-    </p>
-
-    <p style="font-size: 16px; color: #555; line-height: 1.7;">
-      Thank you for choosing 
-      <strong style="color:#ff7f50;">GIFT SHOP</strong>! 
-      Your order has been confirmed and is being prepared with care. 
-      We're excited to help you spread joy! 🎉
-    </p>
-
-    <!-- Order Details Table -->
-    <table style="
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 25px;
-      background: linear-gradient(135deg, #fff9f5 0%, #ffe8dc 100%);
-      border-radius: 12px;
-      overflow: hidden;
-      border: 2px solid #ffb088;
-    ">
-      <tr>
-        <td style="padding: 14px 18px; font-weight: 600; color:#ff7f50; font-size: 15px;">
-          📋 Invoice Number:
-        </td>
-        <td style="padding: 14px 18px; color:#333; font-weight: 500;">
-          ${invoiceNumber}
-        </td>
-      </tr>
-      <tr style="background: rgba(255, 127, 80, 0.05);">
-        <td style="padding: 14px 18px; font-weight: 600; color:#ff7f50; font-size: 15px;">
-          📦 Total Items:
-        </td>
-        <td style="padding: 14px 18px; color:#333; font-weight: 500;">
-          ${newOrder.totalItems}
-        </td>
-      </tr>
-      <tr>
-        <td style="padding: 14px 18px; font-weight: 600; color:#ff7f50; font-size: 15px;">
-          💰 Total Amount:
-        </td>
-        <td style="padding: 14px 18px; color:#333; font-weight: 500;">
-          ${newOrder.subtotal} TK
-        </td>
-      </tr>
-      <tr style="background: rgba(255, 127, 80, 0.05);">
-        <td style="padding: 14px 18px; font-weight: 600; color:#ff7f50; font-size: 15px;">
-          💳 Payment Method:
-        </td>
-        <td style="padding: 14px 18px; color:#333; font-weight: 500;">
-          ${paymentMethod}
-        </td>
-      </tr>
-    </table>
-
-    <!-- Products Section -->
-    <div style="
-      margin-top: 30px;
-      padding: 20px;
-      background: #fff9f5;
-      border-radius: 10px;
-      border-left: 4px solid #ff7f50;
-    ">
-      <h3 style="
-        color: #ff7f50;
-        margin: 0 0 15px 0;
-        font-size: 20px;
-        font-weight: 700;
-        font-family: 'Georgia', serif;
-      ">
-        🎁 Your Gift Selection
-      </h3>
-
-      <ul style="
-        font-size: 16px; 
-        color: #444; 
-        padding-left: 20px;
-        line-height: 1.8;
-        margin: 0;
-      ">
-        ${newOrder.orderItems
-          .map(item => `<li style="margin-bottom: 8px; color: #555;">
-            <span style="color: #ff7f50; font-weight: 600;">✨</span> ${item.name}
-          </li>`)
-          .join("")}
-      </ul>
-    </div>
-
-    <!-- Divider -->
-    <hr style="border: 0; border-top: 2px solid #ffe8dc; margin: 30px 0;">
-
-    <!-- Contact Information -->
-    <div style="
-      background: linear-gradient(135deg, #fff5f0 0%, #ffe8dc 100%);
-      padding: 20px;
-      border-radius: 10px;
-      text-align: center;
-    ">
-      <p style="font-size: 18px; color: #ff7f50; font-weight: 700; margin: 0 0 15px 0; font-family: 'Georgia', serif;">
-        GIFT SHOP
-      </p>
-      <p style="font-size: 14px; color: #666; line-height: 1.7; margin: 0;">
-        📍 Dhaka Outlet, Bailey Road, AQP Shopping Mall<br/>
-        📞 Phone: 01748399860<br/>
-        🆘 Helpline: 01748399860<br/>
-        ✉️ Email: 
-        <a href="mailto:giftshop@gmail.com" style="color: #ff7f50; text-decoration:none; font-weight: 600;">
-          giftshop@gmail.com
-        </a>
-      </p>
-    </div>
-
-    <!-- Footer Message -->
-    <div style="
-      text-align: center;
-      margin-top: 30px;
-      padding: 20px;
-      background: #ff7f50;
-      border-radius: 10px;
-    ">
-      <p style="
-        font-size: 16px;
-        margin: 0;
-        color: #ffffff;
-        font-weight: 600;
-        letter-spacing: 1px;
-      ">
-        🎊 Thank you for making someone's day special! 🎊
-      </p>
-      <p style="
-        font-size: 13px;
-        margin: 8px 0 0 0;
-        color: #ffe8dc;
-      ">
-        Every gift tells a story. We're honored to be part of yours.
-      </p>
-    </div>
-
-  </div>
-
-`;
-
-await sendEmail(customerEmail, `Order Invoice #${invoiceNumber}`, emailBody);
-await sendEmail("shamimrocky801@yahoo.com", `New Order Received #${invoiceNumber}`, emailBody);
-
-return res.status(200).json(jsonResponse(true, "Your order has been placed successfully", newOrder));
-
+    return res.status(200).json(
+      jsonResponse(
+        true,
+        "Your order has been placed successfully",
+        newOrder
+      )
+    );
 
   } catch (error) {
-    console.log("ORDER ERROR:", error);
-    return res.status(500).json(jsonResponse(false, error.message || error, null));
+    console.log(error);
+    return res.status(500).json(
+      jsonResponse(false, error.message || error, null)
+    );
   }
 };
-
-
-
-
 
 
 
