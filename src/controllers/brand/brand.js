@@ -847,9 +847,10 @@ export const getBrand = async (req, res) => {
 export const updateBrand = async (req, res) => {
   try {
     const result = await prisma.$transaction(async (tx) => {
+
       let { name, isActive, brandID, brandAddress } = req.body;
 
-      const brandIdParam = parseInt(req.params.id);
+      const brandIdParam = req.params.id; // ⭐ REMOVE parseInt
 
       // ✅ Find existing brand
       const findBrand = await tx.brand.findUnique({
@@ -862,7 +863,7 @@ export const updateBrand = async (req, res) => {
           .json(jsonResponse(false, "This brand does not exist", null));
       }
 
-      // ✅ Validate name
+      // ✅ Validate name duplicate
       if (name) {
         const existingName = await tx.brand.findFirst({
           where: {
@@ -870,28 +871,24 @@ export const updateBrand = async (req, res) => {
               equals: name,
               mode: "insensitive",
             },
-            NOT: { id: brandIdParam },
+            NOT: {
+              id: brandIdParam,
+            },
           },
         });
 
         if (existingName) {
           return res
             .status(409)
-            .json(
-              jsonResponse(
-                false,
-                `${name} already exists. Change its name.`,
-                null
-              )
-            );
+            .json(jsonResponse(false, `${name} already exists`, null));
         }
       }
 
-      // ✅ Validate brandID duplicate (if provided)
+      // ✅ BrandID duplicate check
       if (brandID) {
         const existingBrandID = await tx.brand.findFirst({
           where: {
-            brandID: brandID,
+            brandID,
             NOT: { id: brandIdParam },
           },
         });
@@ -899,13 +896,11 @@ export const updateBrand = async (req, res) => {
         if (existingBrandID) {
           return res
             .status(409)
-            .json(
-              jsonResponse(false, "Brand ID already exists", null)
-            );
+            .json(jsonResponse(false, "Brand ID already exists", null));
         }
       }
 
-      // ⭐ Prepare update data
+      // ⭐ Update data prepare
       const updateData = {
         name: name ?? findBrand.name,
         slug: name ? slugify(name) : findBrand.slug,
@@ -917,7 +912,7 @@ export const updateBrand = async (req, res) => {
         brandAddress: brandAddress ?? findBrand.brandAddress,
       };
 
-      // ✅ If image uploaded
+      // ✅ Image update
       if (req.file) {
         const uploadResult = await new Promise((resolve, reject) => {
           uploadToCLoudinary(req.file, module_name, (error, result) => {
@@ -926,19 +921,17 @@ export const updateBrand = async (req, res) => {
           });
         });
 
-        if (!uploadResult.secure_url) {
+        if (!uploadResult?.secure_url) {
           throw new Error("Image upload failed");
         }
 
         updateData.image = uploadResult.secure_url;
 
-        // delete old image
         if (findBrand.image) {
           await deleteFromCloudinary(findBrand.image, () => {});
         }
       }
 
-      // ✅ Update brand
       const updatedBrand = await tx.brand.update({
         where: { id: brandIdParam },
         data: updateData,
@@ -958,7 +951,6 @@ export const updateBrand = async (req, res) => {
       .json(jsonResponse(false, error.message, null));
   }
 };
-
 
 
 //ban category
