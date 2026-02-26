@@ -562,9 +562,11 @@ export const createOrder = async (req, res) => {
     });
 
 
-  const estimatedDelivery = new Date(Date.now() + 40 * 60 * 1000);
+  const brandName = newOrder.brandName;
+const invoiceNumber = newOrder.invoiceNumber;
+const estimatedDelivery = new Date(Date.now() + 40 * 60 * 1000);
 
-  const emailBody = `
+const emailBody = `
 <div style="
   max-width:650px;
   margin:auto;
@@ -600,7 +602,9 @@ export const createOrder = async (req, res) => {
     </p>
 
     <p style="font-size:15px;color:#555;line-height:1.6;">
-      Your order from <strong>${brandName}</strong> has been successfully confirmed.
+      Your order from 
+      <strong style="color:#ff6a00;">${brandName}</strong> 
+      has been successfully confirmed.
       Our team is preparing it for express delivery.
     </p>
 
@@ -616,9 +620,10 @@ export const createOrder = async (req, res) => {
       <p style="margin:6px 0;"><strong>Delivery Address:</strong> ${customerAddress}</p>
       <p style="margin:6px 0;"><strong>Total Items:</strong> ${newOrder.totalItems}</p>
       <p style="margin:6px 0;"><strong>Total Amount:</strong> ${newOrder.subtotal} TK</p>
+      <p style="margin:6px 0;"><strong>Payment Method:</strong> ${paymentMethod}</p>
     </div>
 
-    <!-- Delivery Countdown -->
+    <!-- Countdown Section -->
     <div style="
       margin-top:25px;
       background:linear-gradient(135deg,#ff7e00,#ff5100);
@@ -627,8 +632,10 @@ export const createOrder = async (req, res) => {
       text-align:center;
       color:#fff;
     ">
-      <div style="font-size:40px;">⏰</div>
-      <h3 style="margin:10px 0 5px;">Express Delivery (30-40 Minutes)</h3>
+      <div style="font-size:42px;">⏰</div>
+      <h3 style="margin:10px 0 5px;">
+        Express Delivery (30-40 Minutes)
+      </h3>
       <p style="margin:0;font-size:14px;">Estimated Arrival Time</p>
       <p style="font-size:18px;font-weight:700;margin-top:6px;">
         ${estimatedDelivery.toLocaleTimeString()}
@@ -665,27 +672,32 @@ export const createOrder = async (req, res) => {
       </p>
     </div>
 
-    <!-- Product List -->
+    <!-- Ordered Items -->
     <div style="margin-top:25px;">
       <h3 style="color:#ff6a00;">Ordered Items</h3>
-      <ul style="padding-left:20px;color:#444;">
+      <ul style="padding-left:20px;color:#444;line-height:1.8;">
         ${newOrder.orderItems
-          .map(item => `<li style="margin-bottom:6px;">${item.name}</li>`)
+          .map(item => `
+            <li>
+              <strong>${item.name}</strong> 
+              (${item.quantity})
+            </li>
+          `)
           .join("")}
       </ul>
     </div>
 
     <hr style="border:none;border-top:2px solid #ffe5d6;margin:25px 0;" />
 
-    <!-- Footer with Address -->
+    <!-- Footer -->
     <div style="text-align:center;">
       <h3 style="margin:0;color:#ff6a00;">iMall</h3>
       <p style="font-size:13px;color:#666;line-height:1.6;margin-top:8px;">
         Genuine Products with Express Delivery<br/><br/>
-        📍 I-Mall Head Office: Level 4, AQP Shopping Mall,  
+        📍 I-Mall Head Office: Level 4, AQP Shopping Mall,<br/>
         Bailey Road, Ramna, Dhaka-1000, Bangladesh<br/>
-        📞 Phone: 01748399860<br/>
-        ✉️ Email: support@imall.com
+        📞 01748399860<br/>
+        ✉️ support@imall.com
       </p>
     </div>
 
