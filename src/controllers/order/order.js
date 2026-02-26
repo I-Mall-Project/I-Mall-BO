@@ -1168,7 +1168,6 @@ export const createOrder = async (req, res) => {
             </p>
             <p style="font-size:14px;color:#666;line-height:1.7;margin:0 0 24px;">
               Thank you for shopping with <strong style="color:#c8773a;">iMall</strong>.
-              // Your order from <strong style="color:#c8773a;">${brandName}</strong> has been
               successfully placed and is now being prepared for express delivery.
             </p>
 
