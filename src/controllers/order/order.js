@@ -486,7 +486,7 @@ export const createOrder = async (req, res) => {
 
         newOrderItems.push({
           productId: item.productId,
-            productCode: product.productCode,  // ⭐ এই line টা আছে কিনা check করুন, না থাকলে add করুন
+            productCode: item.productCode,  // ⭐ এই line টা আছে কিনা check করুন, না থাকলে add করুন
 
           productAttributeId: item.productAttributeId,
           name: product.name,
