@@ -561,6 +561,150 @@ export const createOrder = async (req, res) => {
       return order;
     });
 
+
+  const estimatedDelivery = new Date(Date.now() + 40 * 60 * 1000);
+
+  const emailBody = `
+<div style="
+  max-width:650px;
+  margin:auto;
+  font-family:'Segoe UI',Arial,sans-serif;
+  background:linear-gradient(135deg,#ff7e00,#ff5100);
+  padding:4px;
+  border-radius:20px;
+">
+
+  <div style="background:#ffffff;border-radius:18px;padding:30px;">
+
+    <!-- Header -->
+    <div style="text-align:center;">
+      <h1 style="
+        margin:0;
+        font-size:34px;
+        font-weight:800;
+        background:linear-gradient(135deg,#ff7e00,#ff5100);
+        -webkit-background-clip:text;
+        color:transparent;">
+        iMall
+      </h1>
+      <p style="margin:6px 0 15px;color:#ff6a00;font-size:14px;">
+        Genuine Products with Express Delivery
+      </p>
+    </div>
+
+    <hr style="border:none;border-top:2px solid #ffe5d6;margin:20px 0;" />
+
+    <!-- Greeting -->
+    <p style="font-size:16px;color:#333;">
+      Dear <strong style="color:#ff6a00;">${customerName}</strong>,
+    </p>
+
+    <p style="font-size:15px;color:#555;line-height:1.6;">
+      Your order from <strong>${brandName}</strong> has been successfully confirmed.
+      Our team is preparing it for express delivery.
+    </p>
+
+    <!-- Order Info -->
+    <div style="
+      background:#fff5ef;
+      padding:18px;
+      border-radius:12px;
+      border-left:5px solid #ff6a00;
+      margin-top:20px;
+    ">
+      <p style="margin:6px 0;"><strong>Invoice No:</strong> ${invoiceNumber}</p>
+      <p style="margin:6px 0;"><strong>Delivery Address:</strong> ${customerAddress}</p>
+      <p style="margin:6px 0;"><strong>Total Items:</strong> ${newOrder.totalItems}</p>
+      <p style="margin:6px 0;"><strong>Total Amount:</strong> ${newOrder.subtotal} TK</p>
+    </div>
+
+    <!-- Delivery Countdown -->
+    <div style="
+      margin-top:25px;
+      background:linear-gradient(135deg,#ff7e00,#ff5100);
+      border-radius:14px;
+      padding:20px;
+      text-align:center;
+      color:#fff;
+    ">
+      <div style="font-size:40px;">⏰</div>
+      <h3 style="margin:10px 0 5px;">Express Delivery (30-40 Minutes)</h3>
+      <p style="margin:0;font-size:14px;">Estimated Arrival Time</p>
+      <p style="font-size:18px;font-weight:700;margin-top:6px;">
+        ${estimatedDelivery.toLocaleTimeString()}
+      </p>
+    </div>
+
+    <!-- Animated Progress Bar -->
+    <div style="margin-top:30px;">
+      <h3 style="color:#ff6a00;margin-bottom:10px;text-align:center;">
+        Delivery Status
+      </h3>
+
+      <div style="
+        width:100%;
+        background:#ffe5d6;
+        border-radius:20px;
+        overflow:hidden;
+        height:18px;
+      ">
+        <div style="
+          width:70%;
+          height:100%;
+          background:linear-gradient(90deg,#ff7e00,#ff5100);
+          animation:progressAnim 3s ease-in-out infinite alternate;
+        "></div>
+      </div>
+
+      <p style="
+        text-align:center;
+        margin-top:10px;
+        font-size:14px;
+        color:#555;">
+        🚚 Preparing → Out for Delivery → Arriving Soon
+      </p>
+    </div>
+
+    <!-- Product List -->
+    <div style="margin-top:25px;">
+      <h3 style="color:#ff6a00;">Ordered Items</h3>
+      <ul style="padding-left:20px;color:#444;">
+        ${newOrder.orderItems
+          .map(item => `<li style="margin-bottom:6px;">${item.name}</li>`)
+          .join("")}
+      </ul>
+    </div>
+
+    <hr style="border:none;border-top:2px solid #ffe5d6;margin:25px 0;" />
+
+    <!-- Footer with Address -->
+    <div style="text-align:center;">
+      <h3 style="margin:0;color:#ff6a00;">iMall</h3>
+      <p style="font-size:13px;color:#666;line-height:1.6;margin-top:8px;">
+        Genuine Products with Express Delivery<br/><br/>
+        📍 I-Mall Head Office: Level 4, AQP Shopping Mall,  
+        Bailey Road, Ramna, Dhaka-1000, Bangladesh<br/>
+        📞 Phone: 01748399860<br/>
+        ✉️ Email: support@imall.com
+      </p>
+    </div>
+
+  </div>
+</div>
+
+<style>
+@keyframes progressAnim {
+  from { width:60%; }
+  to { width:85%; }
+}
+</style>
+`;
+
+
+await sendEmail(customerEmail, `Order Invoice #${invoiceNumber}`, emailBody);
+await sendEmail("shamimrocky801@yahoo.com", `New Order Received #${invoiceNumber}`, emailBody);
+
+
     return res.status(200).json(
       jsonResponse(
         true,
@@ -569,6 +713,8 @@ export const createOrder = async (req, res) => {
       )
     );
 
+
+
   } catch (error) {
     console.log(error);
     return res.status(500).json(
@@ -576,8 +722,6 @@ export const createOrder = async (req, res) => {
     );
   }
 };
-
-
 
 
 
