@@ -909,6 +909,7 @@ export const createOrder = async (req, res) => {
       orderItems,
     } = req.body;
 
+    // ✅ Input Validation
     const inputValidation = validateInput(
       [customerName, customerPhone, customerAddress, paymentMethod],
       ["Name", "Phone", "Shipping Address", "Payment Method"]
@@ -924,7 +925,8 @@ export const createOrder = async (req, res) => {
         .json(jsonResponse(false, "Please select at least 1 item", null));
     }
 
-    const firstItem = orderItems[0];
+    // ✅ Get first product for invoice generation
+    const firstItem = orderItems?.[0];
 
     const productInfo = await prisma.product.findFirst({
       where: {
@@ -943,12 +945,14 @@ export const createOrder = async (req, res) => {
         .json(jsonResponse(false, "Product not found", null));
     }
 
+    // ✅ Generate Invoice
     const invoiceNumber = await generateInvoiceNumber(
       prisma,
       productInfo.brand?.brandID || "00",
       productInfo.productCode || "0000"
     );
 
+    // ✅ Transaction Block
     const newOrder = await prisma.$transaction(async (tx) => {
       let totalItems = 0;
       let subtotal = 0;
@@ -980,24 +984,28 @@ export const createOrder = async (req, res) => {
 
         const totalPrice =
           item.quantity * productAttribute.discountedRetailPrice;
+
         const totalCostPrice =
           item.quantity * productAttribute.costPrice;
 
-        // ✅ OrderItem Snapshot Data
+        // ✅ OrderItem Snapshot
         newOrderItems.push({
           productId: item.productId,
 
           productCode: product.productCode || null,
           barcode: product.barcode || null,
+
           brandId: product.brandId || null,
           brandName: product.brand?.name || null,
 
           productAttributeId: item.productAttributeId,
+
           name: product.name,
           size: productAttribute.size,
 
           costPrice: productAttribute.costPrice,
           retailPrice: productAttribute.retailPrice,
+
           discountPercent: productAttribute.discountPercent,
           discountPrice: productAttribute.discountPrice,
           discountedRetailPrice:
@@ -1013,6 +1021,7 @@ export const createOrder = async (req, res) => {
         subtotalCost += totalCostPrice;
       }
 
+      // ✅ Coupon Logic
       const coupon = couponId
         ? await tx.coupon.findFirst({
             where: { id: couponId, isActive: true },
@@ -1025,6 +1034,7 @@ export const createOrder = async (req, res) => {
       const finalSubtotal =
         subtotal + deliveryCharge - (coupon?.discountAmount ?? 0);
 
+      // ✅ Create Order
       const order = await tx.order.create({
         data: {
           userId,
@@ -1036,10 +1046,12 @@ export const createOrder = async (req, res) => {
           customerEmail,
           customerCity,
           customerPostalCode,
+
           invoiceNumber,
           totalItems,
           subtotalCost,
           subtotal: finalSubtotal,
+
           paymentMethod,
           deliveryChargeInside: deliveryChargeInside ?? null,
           deliveryChargeOutside: deliveryChargeOutside ?? null,
@@ -1053,7 +1065,7 @@ export const createOrder = async (req, res) => {
         },
       });
 
-      // Stock Update
+      // ✅ Stock Update
       for (const item of orderItems) {
         await tx.productAttribute.update({
           where: { id: item.productAttributeId },
@@ -1067,7 +1079,6 @@ export const createOrder = async (req, res) => {
 
       return order;
     });
-
     const orderTime = new Date();
     const estimatedDelivery = new Date(orderTime.getTime() + 40 * 60 * 1000);
 
@@ -1157,7 +1168,7 @@ export const createOrder = async (req, res) => {
             </p>
             <p style="font-size:14px;color:#666;line-height:1.7;margin:0 0 24px;">
               Thank you for shopping with <strong style="color:#c8773a;">iMall</strong>.
-              Your order from <strong style="color:#c8773a;">${brandName}</strong> has been
+              // Your order from <strong style="color:#c8773a;">${brandName}</strong> has been
               successfully placed and is now being prepared for express delivery.
             </p>
 
