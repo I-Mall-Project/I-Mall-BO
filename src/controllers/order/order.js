@@ -985,7 +985,7 @@ export const createOrder = async (req, res) => {
 
         newOrderItems.push({
           productId: item.productId,
-          productCode: product.productCode, // ✅ fixed: product.productCode (DB থেকে)
+          productCode: item.productCode, // ✅ fixed: product.productCode (DB থেকে)
           productAttributeId: item.productAttributeId,
           name: product.name,
           size: productAttribute.size,
