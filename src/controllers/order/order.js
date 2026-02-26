@@ -567,6 +567,9 @@ export const createOrder = async (req, res) => {
       });
     };
 
+    const deliveryCharge = deliveryChargeInside ?? deliveryChargeOutside ?? 0;
+    const deliveryLabel = deliveryChargeInside != null ? "Inside Dhaka" : "Outside Dhaka";
+
     const emailBody = `
 <!DOCTYPE html>
 <html lang="en">
@@ -574,23 +577,23 @@ export const createOrder = async (req, res) => {
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 </head>
-<body style="margin:0;padding:0;background:#f4f4f4;">
+<body style="margin:0;padding:0;background:#f0ece8;">
 
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f4;padding:30px 0;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f0ece8;padding:30px 0;">
   <tr>
     <td align="center">
       <table width="620" cellpadding="0" cellspacing="0" style="
         background:#ffffff;
         border-radius:16px;
         overflow:hidden;
-        box-shadow:0 4px 20px rgba(0,0,0,0.08);
+        box-shadow:0 4px 20px rgba(0,0,0,0.07);
         font-family:'Segoe UI',Arial,sans-serif;
       ">
 
         <!-- TOP GRADIENT BAR -->
         <tr>
           <td style="
-            background:linear-gradient(135deg,#ffb347,#ff8c42);
+            background:linear-gradient(135deg,#c8773a,#b5622c);
             padding:28px 30px;
             text-align:center;
           ">
@@ -603,7 +606,7 @@ export const createOrder = async (req, res) => {
             ">iMall</h1>
             <p style="
               margin:6px 0 0;
-              color:rgba(255,255,255,0.88);
+              color:rgba(255,255,255,0.82);
               font-size:13px;
               letter-spacing:0.5px;
             ">Genuine Products · Express Delivery</p>
@@ -613,14 +616,14 @@ export const createOrder = async (req, res) => {
         <!-- ORDER CONFIRMED BADGE -->
         <tr>
           <td style="
-            background:#fff8f2;
+            background:#fdf6f0;
             padding:20px 30px;
             text-align:center;
-            border-bottom:1px solid #ffe5d0;
+            border-bottom:1px solid #e8d5c8;
           ">
             <span style="
               display:inline-block;
-              background:linear-gradient(135deg,#ffb347,#ff8c42);
+              background:linear-gradient(135deg,#c8773a,#b5622c);
               color:#fff;
               font-size:13px;
               font-weight:700;
@@ -637,11 +640,11 @@ export const createOrder = async (req, res) => {
 
             <!-- Greeting -->
             <p style="font-size:16px;color:#333;margin:0 0 6px;">
-              Dear <strong style="color:#ff8c42;">${customerName}</strong>,
+              Dear <strong style="color:#c8773a;">${customerName}</strong>,
             </p>
             <p style="font-size:14px;color:#666;line-height:1.7;margin:0 0 24px;">
-              Thank you for shopping with <strong style="color:#ff8c42;">iMall</strong>.
-              Your order from <strong style="color:#ff8c42;">${brandName}</strong> has been
+              Thank you for shopping with <strong style="color:#c8773a;">iMall</strong>.
+              Your order from <strong style="color:#c8773a;">${brandName}</strong> has been
               successfully placed and is now being prepared for express delivery.
             </p>
 
@@ -649,21 +652,21 @@ export const createOrder = async (req, res) => {
             <p style="
               font-size:13px;
               font-weight:700;
-              color:#ff8c42;
+              color:#c8773a;
               text-transform:uppercase;
               letter-spacing:1px;
               margin:0 0 10px;
             ">Ordered Items</p>
 
             <table width="100%" cellpadding="0" cellspacing="0" style="
-              border:1px solid #ffe0cc;
+              border:1px solid #e8d5c8;
               border-radius:10px;
               overflow:hidden;
               font-size:14px;
               margin-bottom:24px;
             ">
               <thead>
-                <tr style="background:linear-gradient(135deg,#ffb347,#ff8c42);">
+                <tr style="background:linear-gradient(135deg,#c8773a,#b5622c);">
                   <th style="padding:10px 14px;color:#fff;text-align:left;font-weight:600;">Product</th>
                   <th style="padding:10px 14px;color:#fff;text-align:center;font-weight:600;">Size</th>
                   <th style="padding:10px 14px;color:#fff;text-align:center;font-weight:600;">Qty</th>
@@ -674,11 +677,11 @@ export const createOrder = async (req, res) => {
                 ${newOrder.orderItems
                   .map(
                     (item, index) => `
-                  <tr style="background:${index % 2 === 0 ? "#ffffff" : "#fff8f2"};">
+                  <tr style="background:${index % 2 === 0 ? "#ffffff" : "#fdf6f0"};">
                     <td style="padding:10px 14px;color:#333;">${item.name}</td>
                     <td style="padding:10px 14px;color:#555;text-align:center;">${item.size || "—"}</td>
                     <td style="padding:10px 14px;color:#555;text-align:center;">${item.quantity}</td>
-                    <td style="padding:10px 14px;color:#ff8c42;font-weight:600;text-align:right;">${item.discountedRetailPrice} TK</td>
+                    <td style="padding:10px 14px;color:#c8773a;font-weight:600;text-align:right;">${item.discountedRetailPrice} TK</td>
                   </tr>
                 `
                   )
@@ -690,45 +693,60 @@ export const createOrder = async (req, res) => {
             <p style="
               font-size:13px;
               font-weight:700;
-              color:#ff8c42;
+              color:#c8773a;
               text-transform:uppercase;
               letter-spacing:1px;
               margin:0 0 10px;
             ">Order Summary</p>
 
             <table width="100%" cellpadding="0" cellspacing="0" style="
-              background:#fff8f2;
-              border:1px solid #ffe0cc;
+              background:#fdf6f0;
+              border:1px solid #e8d5c8;
               border-radius:10px;
               overflow:hidden;
               font-size:14px;
               margin-bottom:24px;
             ">
               <tr>
-                <td style="padding:10px 16px;color:#555;border-bottom:1px solid #ffe5d0;">Invoice No</td>
-                <td style="padding:10px 16px;color:#333;font-weight:600;text-align:right;border-bottom:1px solid #ffe5d0;">#${invoiceNumber}</td>
+                <td style="padding:10px 16px;color:#555;border-bottom:1px solid #e8d5c8;">Invoice No</td>
+                <td style="padding:10px 16px;color:#333;font-weight:600;text-align:right;border-bottom:1px solid #e8d5c8;">#${invoiceNumber}</td>
               </tr>
               <tr>
-                <td style="padding:10px 16px;color:#555;border-bottom:1px solid #ffe5d0;">Delivery Address</td>
-                <td style="padding:10px 16px;color:#333;text-align:right;border-bottom:1px solid #ffe5d0;">${customerAddress}${customerCity ? `, ${customerCity}` : ""}</td>
+                <td style="padding:10px 16px;color:#555;border-bottom:1px solid #e8d5c8;">Delivery Address</td>
+                <td style="padding:10px 16px;color:#333;text-align:right;border-bottom:1px solid #e8d5c8;">${customerAddress}${customerCity ? `, ${customerCity}` : ""}</td>
               </tr>
               <tr>
-                <td style="padding:10px 16px;color:#555;border-bottom:1px solid #ffe5d0;">Total Items</td>
-                <td style="padding:10px 16px;color:#333;font-weight:600;text-align:right;border-bottom:1px solid #ffe5d0;">${newOrder.totalItems}</td>
+                <td style="padding:10px 16px;color:#555;border-bottom:1px solid #e8d5c8;">Total Items</td>
+                <td style="padding:10px 16px;color:#333;font-weight:600;text-align:right;border-bottom:1px solid #e8d5c8;">${newOrder.totalItems}</td>
               </tr>
               <tr>
-                <td style="padding:10px 16px;color:#555;border-bottom:1px solid #ffe5d0;">Payment Method</td>
-                <td style="padding:10px 16px;color:#333;text-align:right;border-bottom:1px solid #ffe5d0;">${paymentMethod}</td>
+                <td style="padding:10px 16px;color:#555;border-bottom:1px solid #e8d5c8;">Payment Method</td>
+                <td style="padding:10px 16px;color:#333;text-align:right;border-bottom:1px solid #e8d5c8;">${paymentMethod}</td>
+              </tr>
+              <tr>
+                <td style="padding:10px 16px;color:#555;border-bottom:1px solid #e8d5c8;">
+                  Delivery Charge
+                  <span style="
+                    font-size:11px;
+                    color:#fff;
+                    background:#c8773a;
+                    padding:2px 8px;
+                    border-radius:10px;
+                    margin-left:6px;
+                    font-weight:600;
+                  ">${deliveryLabel}</span>
+                </td>
+                <td style="padding:10px 16px;color:#333;font-weight:600;text-align:right;border-bottom:1px solid #e8d5c8;">${deliveryCharge} TK</td>
               </tr>
               <tr>
                 <td style="padding:12px 16px;color:#333;font-weight:700;font-size:15px;">Total Amount</td>
-                <td style="padding:12px 16px;color:#ff8c42;font-weight:800;font-size:16px;text-align:right;">${newOrder.subtotal} TK</td>
+                <td style="padding:12px 16px;color:#c8773a;font-weight:800;font-size:16px;text-align:right;">${newOrder.subtotal} TK</td>
               </tr>
             </table>
 
             <!-- Delivery Time Box -->
             <table width="100%" cellpadding="0" cellspacing="0" style="
-              background:linear-gradient(135deg,#ffb347,#ff8c42);
+              background:linear-gradient(135deg,#c8773a,#b5622c);
               border-radius:12px;
               overflow:hidden;
               margin-bottom:24px;
@@ -780,13 +798,13 @@ export const createOrder = async (req, res) => {
             <p style="
               font-size:13px;
               font-weight:700;
-              color:#ff8c42;
+              color:#c8773a;
               text-transform:uppercase;
               letter-spacing:1px;
               margin:0 0 10px;
             ">Delivery Status</p>
             <div style="
-              background:#ffe5d6;
+              background:#e8d5c8;
               border-radius:20px;
               overflow:hidden;
               height:14px;
@@ -795,29 +813,29 @@ export const createOrder = async (req, res) => {
               <div style="
                 width:70%;
                 height:100%;
-                background:linear-gradient(90deg,#ffb347,#ff8c42);
+                background:linear-gradient(90deg,#c8773a,#b5622c);
                 border-radius:20px;
               "></div>
             </div>
             <p style="font-size:13px;color:#888;text-align:center;margin:0 0 24px;">
-              🟠 Order Confirmed &nbsp;→&nbsp; 🚚 Out for Delivery &nbsp;→&nbsp; 📦 Arriving Soon
+              🟤 Order Confirmed &nbsp;→&nbsp; 🚚 Out for Delivery &nbsp;→&nbsp; 📦 Arriving Soon
             </p>
 
             <!-- Need Help -->
             <div style="
-              background:#fff8f2;
-              border:1px solid #ffe0cc;
+              background:#fdf6f0;
+              border:1px solid #e8d5c8;
               border-radius:10px;
               padding:14px 18px;
               font-size:13px;
               color:#666;
               line-height:1.7;
             ">
-              <strong style="color:#ff8c42;">Need help?</strong>
+              <strong style="color:#c8773a;">Need help?</strong>
               Contact us at
-              <a href="tel:01748399860" style="color:#ff8c42;text-decoration:none;font-weight:600;">01748399860</a>
+              <a href="tel:01748399860" style="color:#c8773a;text-decoration:none;font-weight:600;">01748399860</a>
               or email
-              <a href="mailto:support@imall.com" style="color:#ff8c42;text-decoration:none;font-weight:600;">support@imall.com</a>
+              <a href="mailto:support@imall.com" style="color:#c8773a;text-decoration:none;font-weight:600;">support@imall.com</a>
             </div>
 
           </td>
@@ -826,12 +844,12 @@ export const createOrder = async (req, res) => {
         <!-- FOOTER -->
         <tr>
           <td style="
-            background:#fff8f2;
-            border-top:1px solid #ffe5d0;
+            background:#fdf6f0;
+            border-top:1px solid #e8d5c8;
             padding:20px 30px;
             text-align:center;
           ">
-            <p style="margin:0;font-size:15px;font-weight:800;color:#ff8c42;">iMall</p>
+            <p style="margin:0;font-size:15px;font-weight:800;color:#c8773a;">iMall</p>
             <p style="margin:6px 0 0;font-size:12px;color:#999;line-height:1.8;">
               📍 Level 4, AQP Shopping Mall, Bailey Road, Ramna, Dhaka-1000<br/>
               📞 01748399860 &nbsp;·&nbsp; ✉️ support@imall.com
