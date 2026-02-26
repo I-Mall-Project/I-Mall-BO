@@ -47,7 +47,7 @@ const sendEmail = async (to, subject, html) => {
   });
 
   await transporter.sendMail({
-    from: `"Gift Shop" <${GMAIL_ID}>`,
+    from: `"iMall" <${GMAIL_ID}>`,
     to,
     subject,
     html,
