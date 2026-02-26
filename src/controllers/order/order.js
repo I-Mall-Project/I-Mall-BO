@@ -392,8 +392,6 @@ const generateInvoiceNumber = async (tx, brandID, productCode) => {
 
 
 
-
-
 export const createOrder = async (req, res) => {
   try {
     const {
@@ -422,42 +420,48 @@ export const createOrder = async (req, res) => {
     }
 
     if (!orderItems || orderItems.length === 0) {
-      return res.status(400).json(
-        jsonResponse(false, "Please select at least 1 item", null)
-      );
+      return res
+        .status(400)
+        .json(jsonResponse(false, "Please select at least 1 item", null));
     }
 
-    const newOrder = await prisma.$transaction(async (tx) => {
+    // ⭐ Transaction এর বাইরে আগেই productInfo ও invoiceNumber বের করুন
+    const firstItem = orderItems[0];
 
+    const productInfo = await prisma.product.findFirst({
+      where: {
+        id: firstItem.productId,
+        isDeleted: false,
+        isActive: true,
+      },
+      include: {
+        brand: true,
+      },
+    });
+
+    if (!productInfo) {
+      return res
+        .status(400)
+        .json(jsonResponse(false, "Product not found", null));
+    }
+
+    // ⭐ invoiceNumber আলাদাভাবে generate করুন (transaction এর বাইরে)
+    const invoiceNumber = await generateInvoiceNumber(
+      prisma, // tx এর বদলে prisma পাঠান
+      productInfo.brand?.brandID || "00",
+      productInfo.productCode || "0000"
+    );
+
+    // ⭐ brandName এখানেই ধরে রাখুন
+    const brandName = productInfo.brand?.name || "iMall";
+
+    const newOrder = await prisma.$transaction(async (tx) => {
       let totalItems = 0;
       let subtotal = 0;
       let subtotalCost = 0;
       let newOrderItems = [];
 
-      // ⭐ First product for invoice generation
-      const firstItem = orderItems[0];
-
-      const productInfo = await tx.product.findFirst({
-        where: {
-          id: firstItem.productId,
-          isDeleted: false,
-          isActive: true,
-        },
-        include: {
-          brand: true,
-        },
-      });
-
-      if (!productInfo) throw new Error("Product not found");
-
-      const invoiceNumber = await generateInvoiceNumber(
-        tx,
-        productInfo.brand?.brandID || "00",
-        productInfo.productCode || "0000"
-      );
-
       for (const item of orderItems) {
-
         const product = await tx.product.findFirst({
           where: {
             id: item.productId,
@@ -480,11 +484,8 @@ export const createOrder = async (req, res) => {
           throw new Error("Product or attribute does not exist");
         }
 
-        const totalPrice =
-          item.quantity * productAttribute.discountedRetailPrice;
-
-        const totalCostPrice =
-          item.quantity * productAttribute.costPrice;
+        const totalPrice = item.quantity * productAttribute.discountedRetailPrice;
+        const totalCostPrice = item.quantity * productAttribute.costPrice;
 
         newOrderItems.push({
           productId: item.productId,
@@ -495,8 +496,7 @@ export const createOrder = async (req, res) => {
           retailPrice: productAttribute.retailPrice,
           discountPercent: productAttribute.discountPercent,
           discountPrice: productAttribute.discountPrice,
-          discountedRetailPrice:
-            productAttribute.discountedRetailPrice,
+          discountedRetailPrice: productAttribute.discountedRetailPrice,
           totalCostPrice,
           totalPrice,
           quantity: item.quantity,
@@ -513,9 +513,7 @@ export const createOrder = async (req, res) => {
           })
         : null;
 
-      const deliveryCharge =
-        deliveryChargeInside ?? deliveryChargeOutside ?? 0;
-
+      const deliveryCharge = deliveryChargeInside ?? deliveryChargeOutside ?? 0;
       const finalSubtotal =
         subtotal + deliveryCharge - (coupon?.discountAmount ?? 0);
 
@@ -561,12 +559,10 @@ export const createOrder = async (req, res) => {
       return order;
     });
 
+    // ⭐ এখন brandName ও invoiceNumber সঠিকভাবে পাওয়া যাবে
+    const estimatedDelivery = new Date(Date.now() + 40 * 60 * 1000);
 
-  const brandName = newOrder.brandName;
-const invoiceNumber = newOrder.invoiceNumber;
-const estimatedDelivery = new Date(Date.now() + 40 * 60 * 1000);
-
-const emailBody = `
+    const emailBody = `
 <div style="
   max-width:650px;
   margin:auto;
@@ -575,10 +571,7 @@ const emailBody = `
   padding:4px;
   border-radius:20px;
 ">
-
   <div style="background:#ffffff;border-radius:18px;padding:30px;">
-
-    <!-- Header -->
     <div style="text-align:center;">
       <h1 style="
         margin:0;
@@ -593,22 +586,16 @@ const emailBody = `
         Genuine Products with Express Delivery
       </p>
     </div>
-
     <hr style="border:none;border-top:2px solid #ffe5d6;margin:20px 0;" />
-
-    <!-- Greeting -->
     <p style="font-size:16px;color:#333;">
       Dear <strong style="color:#ff6a00;">${customerName}</strong>,
     </p>
-
     <p style="font-size:15px;color:#555;line-height:1.6;">
       Your order from 
       <strong style="color:#ff6a00;">${brandName}</strong> 
       has been successfully confirmed.
       Our team is preparing it for express delivery.
     </p>
-
-    <!-- Order Info -->
     <div style="
       background:#fff5ef;
       padding:18px;
@@ -622,8 +609,6 @@ const emailBody = `
       <p style="margin:6px 0;"><strong>Total Amount:</strong> ${newOrder.subtotal} TK</p>
       <p style="margin:6px 0;"><strong>Payment Method:</strong> ${paymentMethod}</p>
     </div>
-
-    <!-- Countdown Section -->
     <div style="
       margin-top:25px;
       background:linear-gradient(135deg,#ff7e00,#ff5100);
@@ -633,21 +618,16 @@ const emailBody = `
       color:#fff;
     ">
       <div style="font-size:42px;">⏰</div>
-      <h3 style="margin:10px 0 5px;">
-        Express Delivery (30-40 Minutes)
-      </h3>
+      <h3 style="margin:10px 0 5px;">Express Delivery (30-40 Minutes)</h3>
       <p style="margin:0;font-size:14px;">Estimated Arrival Time</p>
       <p style="font-size:18px;font-weight:700;margin-top:6px;">
         ${estimatedDelivery.toLocaleTimeString()}
       </p>
     </div>
-
-    <!-- Animated Progress Bar -->
     <div style="margin-top:30px;">
       <h3 style="color:#ff6a00;margin-bottom:10px;text-align:center;">
         Delivery Status
       </h3>
-
       <div style="
         width:100%;
         background:#ffe5d6;
@@ -659,37 +639,28 @@ const emailBody = `
           width:70%;
           height:100%;
           background:linear-gradient(90deg,#ff7e00,#ff5100);
-          animation:progressAnim 3s ease-in-out infinite alternate;
         "></div>
       </div>
-
-      <p style="
-        text-align:center;
-        margin-top:10px;
-        font-size:14px;
-        color:#555;">
+      <p style="text-align:center;margin-top:10px;font-size:14px;color:#555;">
         🚚 Preparing → Out for Delivery → Arriving Soon
       </p>
     </div>
-
-    <!-- Ordered Items -->
     <div style="margin-top:25px;">
       <h3 style="color:#ff6a00;">Ordered Items</h3>
       <ul style="padding-left:20px;color:#444;line-height:1.8;">
         ${newOrder.orderItems
-          .map(item => `
-            <li>
-              <strong>${item.name}</strong> 
-              (${item.quantity})
-            </li>
-          `)
+          .map(
+            (item) => `
+          <li>
+            <strong>${item.name}</strong> 
+            (${item.quantity})
+          </li>
+        `
+          )
           .join("")}
       </ul>
     </div>
-
     <hr style="border:none;border-top:2px solid #ffe5d6;margin:25px 0;" />
-
-    <!-- Footer -->
     <div style="text-align:center;">
       <h3 style="margin:0;color:#ff6a00;">iMall</h3>
       <p style="font-size:13px;color:#666;line-height:1.6;margin-top:8px;">
@@ -700,41 +671,24 @@ const emailBody = `
         ✉️ support@imall.com
       </p>
     </div>
-
   </div>
-</div>
+</div>`;
 
-<style>
-@keyframes progressAnim {
-  from { width:60%; }
-  to { width:85%; }
-}
-</style>
-`;
-
-
-await sendEmail(customerEmail, `Order Invoice #${invoiceNumber}`, emailBody);
-await sendEmail("shamimrocky801@yahoo.com", `New Order Received #${invoiceNumber}`, emailBody);
-
-
-    return res.status(200).json(
-      jsonResponse(
-        true,
-        "Your order has been placed successfully",
-        newOrder
-      )
+    await sendEmail(customerEmail, `Order Invoice #${invoiceNumber}`, emailBody);
+    await sendEmail(
+      "shamimrocky801@yahoo.com",
+      `New Order Received #${invoiceNumber}`,
+      emailBody
     );
 
-
-
+    return res
+      .status(200)
+      .json(jsonResponse(true, "Your order has been placed successfully", newOrder));
   } catch (error) {
     console.log(error);
-    return res.status(500).json(
-      jsonResponse(false, error.message || error, null)
-    );
+    return res.status(500).json(jsonResponse(false, error.message || error, null));
   }
 };
-
 
 
 
