@@ -1067,7 +1067,6 @@ export const createOrder = async (req, res) => {
 
       return order;
     });
-    newOrder.brandName = brandName; // ✅ fixed: PDF ও email এ brandName আসবে
 
     const orderTime = new Date();
     const estimatedDelivery = new Date(orderTime.getTime() + 40 * 60 * 1000);
