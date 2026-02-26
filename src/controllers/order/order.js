@@ -949,8 +949,6 @@ export const createOrder = async (req, res) => {
       productInfo.productCode || "0000"
     );
 
-    const brandName = productInfo.brand?.name || "iMall";
-
     const newOrder = await prisma.$transaction(async (tx) => {
       let totalItems = 0;
       let subtotal = 0;
@@ -980,20 +978,31 @@ export const createOrder = async (req, res) => {
           throw new Error("Product or attribute does not exist");
         }
 
-        const totalPrice = item.quantity * productAttribute.discountedRetailPrice;
-        const totalCostPrice = item.quantity * productAttribute.costPrice;
+        const totalPrice =
+          item.quantity * productAttribute.discountedRetailPrice;
+        const totalCostPrice =
+          item.quantity * productAttribute.costPrice;
 
+        // ✅ OrderItem Snapshot Data
         newOrderItems.push({
           productId: item.productId,
-          productCode: item.productCode, // ✅ fixed: product.productCode (DB থেকে)
+
+          productCode: product.productCode || null,
+          barcode: product.barcode || null,
+          brandId: product.brandId || null,
+          brandName: product.brand?.name || null,
+
           productAttributeId: item.productAttributeId,
           name: product.name,
           size: productAttribute.size,
+
           costPrice: productAttribute.costPrice,
           retailPrice: productAttribute.retailPrice,
           discountPercent: productAttribute.discountPercent,
           discountPrice: productAttribute.discountPrice,
-          discountedRetailPrice: productAttribute.discountedRetailPrice,
+          discountedRetailPrice:
+            productAttribute.discountedRetailPrice,
+
           totalCostPrice,
           totalPrice,
           quantity: item.quantity,
@@ -1010,7 +1019,9 @@ export const createOrder = async (req, res) => {
           })
         : null;
 
-      const deliveryCharge = deliveryChargeInside ?? deliveryChargeOutside ?? 0;
+      const deliveryCharge =
+        deliveryChargeInside ?? deliveryChargeOutside ?? 0;
+
       const finalSubtotal =
         subtotal + deliveryCharge - (coupon?.discountAmount ?? 0);
 
@@ -1032,6 +1043,7 @@ export const createOrder = async (req, res) => {
           paymentMethod,
           deliveryChargeInside: deliveryChargeInside ?? null,
           deliveryChargeOutside: deliveryChargeOutside ?? null,
+
           orderItems: {
             create: newOrderItems,
           },
@@ -1041,6 +1053,7 @@ export const createOrder = async (req, res) => {
         },
       });
 
+      // Stock Update
       for (const item of orderItems) {
         await tx.productAttribute.update({
           where: { id: item.productAttributeId },
@@ -1054,7 +1067,6 @@ export const createOrder = async (req, res) => {
 
       return order;
     });
-
     newOrder.brandName = brandName; // ✅ fixed: PDF ও email এ brandName আসবে
 
     const orderTime = new Date();

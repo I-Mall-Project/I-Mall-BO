@@ -346,6 +346,10 @@ model OrderItem {
   updatedBy             String?
   createdAt             DateTime         @default(now())
   updatedAt             DateTime         @updatedAt
+  brandId               String?
+  brandName             String?
+  productCode           String?
+  barcode               String?
   order                 Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
   productAttribute      ProductAttribute @relation(fields: [productAttributeId], references: [id], onDelete: Cascade)
   product               Product          @relation(fields: [productId], references: [id], onDelete: Cascade)
