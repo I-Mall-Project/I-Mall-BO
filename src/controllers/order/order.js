@@ -425,7 +425,6 @@ export const createOrder = async (req, res) => {
         .json(jsonResponse(false, "Please select at least 1 item", null));
     }
 
-    // ⭐ Transaction এর বাইরে আগেই productInfo ও invoiceNumber বের করুন
     const firstItem = orderItems[0];
 
     const productInfo = await prisma.product.findFirst({
@@ -445,14 +444,12 @@ export const createOrder = async (req, res) => {
         .json(jsonResponse(false, "Product not found", null));
     }
 
-    // ⭐ invoiceNumber আলাদাভাবে generate করুন (transaction এর বাইরে)
     const invoiceNumber = await generateInvoiceNumber(
-      prisma, // tx এর বদলে prisma পাঠান
+      prisma,
       productInfo.brand?.brandID || "00",
       productInfo.productCode || "0000"
     );
 
-    // ⭐ brandName এখানেই ধরে রাখুন
     const brandName = productInfo.brand?.name || "iMall";
 
     const newOrder = await prisma.$transaction(async (tx) => {
@@ -544,7 +541,6 @@ export const createOrder = async (req, res) => {
         },
       });
 
-      // Reduce stock
       for (const item of orderItems) {
         await tx.productAttribute.update({
           where: { id: item.productAttributeId },
@@ -559,131 +555,316 @@ export const createOrder = async (req, res) => {
       return order;
     });
 
-    // ⭐ এখন brandName ও invoiceNumber সঠিকভাবে পাওয়া যাবে
-    const estimatedDelivery = new Date(Date.now() + 40 * 60 * 1000);
+    const orderTime = new Date();
+    const estimatedDelivery = new Date(orderTime.getTime() + 40 * 60 * 1000);
+
+    const formatTime = (date) => {
+      return date.toLocaleTimeString("en-BD", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+        timeZone: "Asia/Dhaka",
+      });
+    };
 
     const emailBody = `
-<div style="
-  max-width:650px;
-  margin:auto;
-  font-family:'Segoe UI',Arial,sans-serif;
-  background:linear-gradient(135deg,#ff7e00,#ff5100);
-  padding:4px;
-  border-radius:20px;
-">
-  <div style="background:#ffffff;border-radius:18px;padding:30px;">
-    <div style="text-align:center;">
-      <h1 style="
-        margin:0;
-        font-size:34px;
-        font-weight:800;
-        background:linear-gradient(135deg,#ff7e00,#ff5100);
-        -webkit-background-clip:text;
-        color:transparent;">
-        iMall
-      </h1>
-      <p style="margin:6px 0 15px;color:#ff6a00;font-size:14px;">
-        Genuine Products with Express Delivery
-      </p>
-    </div>
-    <hr style="border:none;border-top:2px solid #ffe5d6;margin:20px 0;" />
-    <p style="font-size:16px;color:#333;">
-      Dear <strong style="color:#ff6a00;">${customerName}</strong>,
-    </p>
-    <p style="font-size:15px;color:#555;line-height:1.6;">
-      Your order from 
-      <strong style="color:#ff6a00;">${brandName}</strong> 
-      has been successfully confirmed.
-      Our team is preparing it for express delivery.
-    </p>
-    <div style="
-      background:#fff5ef;
-      padding:18px;
-      border-radius:12px;
-      border-left:5px solid #ff6a00;
-      margin-top:20px;
-    ">
-      <p style="margin:6px 0;"><strong>Invoice No:</strong> ${invoiceNumber}</p>
-      <p style="margin:6px 0;"><strong>Delivery Address:</strong> ${customerAddress}</p>
-      <p style="margin:6px 0;"><strong>Total Items:</strong> ${newOrder.totalItems}</p>
-      <p style="margin:6px 0;"><strong>Total Amount:</strong> ${newOrder.subtotal} TK</p>
-      <p style="margin:6px 0;"><strong>Payment Method:</strong> ${paymentMethod}</p>
-    </div>
-    <div style="
-      margin-top:25px;
-      background:linear-gradient(135deg,#ff7e00,#ff5100);
-      border-radius:14px;
-      padding:20px;
-      text-align:center;
-      color:#fff;
-    ">
-      <div style="font-size:42px;">⏰</div>
-      <h3 style="margin:10px 0 5px;">Express Delivery (30-40 Minutes)</h3>
-      <p style="margin:0;font-size:14px;">Estimated Arrival Time</p>
-      <p style="font-size:18px;font-weight:700;margin-top:6px;">
-        ${estimatedDelivery.toLocaleTimeString()}
-      </p>
-    </div>
-    <div style="margin-top:30px;">
-      <h3 style="color:#ff6a00;margin-bottom:10px;text-align:center;">
-        Delivery Status
-      </h3>
-      <div style="
-        width:100%;
-        background:#ffe5d6;
-        border-radius:20px;
-        overflow:hidden;
-        height:18px;
-      ">
-        <div style="
-          width:70%;
-          height:100%;
-          background:linear-gradient(90deg,#ff7e00,#ff5100);
-        "></div>
-      </div>
-      <p style="text-align:center;margin-top:10px;font-size:14px;color:#555;">
-        🚚 Preparing → Out for Delivery → Arriving Soon
-      </p>
-    </div>
-    <div style="margin-top:25px;">
-      <h3 style="color:#ff6a00;">Ordered Items</h3>
-      <ul style="padding-left:20px;color:#444;line-height:1.8;">
-        ${newOrder.orderItems
-          .map(
-            (item) => `
-          <li>
-            <strong>${item.name}</strong> 
-            (${item.quantity})
-          </li>
-        `
-          )
-          .join("")}
-      </ul>
-    </div>
-    <hr style="border:none;border-top:2px solid #ffe5d6;margin:25px 0;" />
-    <div style="text-align:center;">
-      <h3 style="margin:0;color:#ff6a00;">iMall</h3>
-      <p style="font-size:13px;color:#666;line-height:1.6;margin-top:8px;">
-        Genuine Products with Express Delivery<br/><br/>
-        📍 I-Mall Head Office: Level 4, AQP Shopping Mall,<br/>
-        Bailey Road, Ramna, Dhaka-1000, Bangladesh<br/>
-        📞 01748399860<br/>
-        ✉️ support@imall.com
-      </p>
-    </div>
-  </div>
-</div>`;
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+</head>
+<body style="margin:0;padding:0;background:#f4f4f4;">
 
-    await sendEmail(customerEmail, `Order Invoice #${invoiceNumber}`, emailBody);
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f4;padding:30px 0;">
+  <tr>
+    <td align="center">
+      <table width="620" cellpadding="0" cellspacing="0" style="
+        background:#ffffff;
+        border-radius:16px;
+        overflow:hidden;
+        box-shadow:0 4px 20px rgba(0,0,0,0.08);
+        font-family:'Segoe UI',Arial,sans-serif;
+      ">
+
+        <!-- TOP GRADIENT BAR -->
+        <tr>
+          <td style="
+            background:linear-gradient(135deg,#ffb347,#ff8c42);
+            padding:28px 30px;
+            text-align:center;
+          ">
+            <h1 style="
+              margin:0;
+              font-size:36px;
+              font-weight:900;
+              color:#ffffff;
+              letter-spacing:2px;
+            ">iMall</h1>
+            <p style="
+              margin:6px 0 0;
+              color:rgba(255,255,255,0.88);
+              font-size:13px;
+              letter-spacing:0.5px;
+            ">Genuine Products · Express Delivery</p>
+          </td>
+        </tr>
+
+        <!-- ORDER CONFIRMED BADGE -->
+        <tr>
+          <td style="
+            background:#fff8f2;
+            padding:20px 30px;
+            text-align:center;
+            border-bottom:1px solid #ffe5d0;
+          ">
+            <span style="
+              display:inline-block;
+              background:linear-gradient(135deg,#ffb347,#ff8c42);
+              color:#fff;
+              font-size:13px;
+              font-weight:700;
+              padding:6px 20px;
+              border-radius:30px;
+              letter-spacing:1px;
+            ">✔ ORDER CONFIRMED</span>
+          </td>
+        </tr>
+
+        <!-- BODY -->
+        <tr>
+          <td style="padding:30px;">
+
+            <!-- Greeting -->
+            <p style="font-size:16px;color:#333;margin:0 0 6px;">
+              Dear <strong style="color:#ff8c42;">${customerName}</strong>,
+            </p>
+            <p style="font-size:14px;color:#666;line-height:1.7;margin:0 0 24px;">
+              Thank you for shopping with <strong style="color:#ff8c42;">iMall</strong>.
+              Your order from <strong style="color:#ff8c42;">${brandName}</strong> has been
+              successfully placed and is now being prepared for express delivery.
+            </p>
+
+            <!-- Ordered Items Table -->
+            <p style="
+              font-size:13px;
+              font-weight:700;
+              color:#ff8c42;
+              text-transform:uppercase;
+              letter-spacing:1px;
+              margin:0 0 10px;
+            ">Ordered Items</p>
+
+            <table width="100%" cellpadding="0" cellspacing="0" style="
+              border:1px solid #ffe0cc;
+              border-radius:10px;
+              overflow:hidden;
+              font-size:14px;
+              margin-bottom:24px;
+            ">
+              <thead>
+                <tr style="background:linear-gradient(135deg,#ffb347,#ff8c42);">
+                  <th style="padding:10px 14px;color:#fff;text-align:left;font-weight:600;">Product</th>
+                  <th style="padding:10px 14px;color:#fff;text-align:center;font-weight:600;">Size</th>
+                  <th style="padding:10px 14px;color:#fff;text-align:center;font-weight:600;">Qty</th>
+                  <th style="padding:10px 14px;color:#fff;text-align:right;font-weight:600;">Unit Price</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${newOrder.orderItems
+                  .map(
+                    (item, index) => `
+                  <tr style="background:${index % 2 === 0 ? "#ffffff" : "#fff8f2"};">
+                    <td style="padding:10px 14px;color:#333;">${item.name}</td>
+                    <td style="padding:10px 14px;color:#555;text-align:center;">${item.size || "—"}</td>
+                    <td style="padding:10px 14px;color:#555;text-align:center;">${item.quantity}</td>
+                    <td style="padding:10px 14px;color:#ff8c42;font-weight:600;text-align:right;">${item.discountedRetailPrice} TK</td>
+                  </tr>
+                `
+                  )
+                  .join("")}
+              </tbody>
+            </table>
+
+            <!-- Order Summary -->
+            <p style="
+              font-size:13px;
+              font-weight:700;
+              color:#ff8c42;
+              text-transform:uppercase;
+              letter-spacing:1px;
+              margin:0 0 10px;
+            ">Order Summary</p>
+
+            <table width="100%" cellpadding="0" cellspacing="0" style="
+              background:#fff8f2;
+              border:1px solid #ffe0cc;
+              border-radius:10px;
+              overflow:hidden;
+              font-size:14px;
+              margin-bottom:24px;
+            ">
+              <tr>
+                <td style="padding:10px 16px;color:#555;border-bottom:1px solid #ffe5d0;">Invoice No</td>
+                <td style="padding:10px 16px;color:#333;font-weight:600;text-align:right;border-bottom:1px solid #ffe5d0;">#${invoiceNumber}</td>
+              </tr>
+              <tr>
+                <td style="padding:10px 16px;color:#555;border-bottom:1px solid #ffe5d0;">Delivery Address</td>
+                <td style="padding:10px 16px;color:#333;text-align:right;border-bottom:1px solid #ffe5d0;">${customerAddress}${customerCity ? `, ${customerCity}` : ""}</td>
+              </tr>
+              <tr>
+                <td style="padding:10px 16px;color:#555;border-bottom:1px solid #ffe5d0;">Total Items</td>
+                <td style="padding:10px 16px;color:#333;font-weight:600;text-align:right;border-bottom:1px solid #ffe5d0;">${newOrder.totalItems}</td>
+              </tr>
+              <tr>
+                <td style="padding:10px 16px;color:#555;border-bottom:1px solid #ffe5d0;">Payment Method</td>
+                <td style="padding:10px 16px;color:#333;text-align:right;border-bottom:1px solid #ffe5d0;">${paymentMethod}</td>
+              </tr>
+              <tr>
+                <td style="padding:12px 16px;color:#333;font-weight:700;font-size:15px;">Total Amount</td>
+                <td style="padding:12px 16px;color:#ff8c42;font-weight:800;font-size:16px;text-align:right;">${newOrder.subtotal} TK</td>
+              </tr>
+            </table>
+
+            <!-- Delivery Time Box -->
+            <table width="100%" cellpadding="0" cellspacing="0" style="
+              background:linear-gradient(135deg,#ffb347,#ff8c42);
+              border-radius:12px;
+              overflow:hidden;
+              margin-bottom:24px;
+            ">
+              <tr>
+                <td style="padding:22px;text-align:center;color:#fff;">
+                  <div style="font-size:36px;margin-bottom:8px;">⏰</div>
+                  <p style="margin:0;font-size:15px;font-weight:700;letter-spacing:0.5px;">
+                    Express Delivery — 30 to 40 Minutes
+                  </p>
+                  <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:16px;">
+                    <tr>
+                      <td style="text-align:center;width:50%;padding:0 8px;">
+                        <p style="margin:0;font-size:12px;opacity:0.85;text-transform:uppercase;letter-spacing:1px;">Order Placed At</p>
+                        <p style="
+                          margin:6px 0 0;
+                          font-size:18px;
+                          font-weight:700;
+                          background:rgba(255,255,255,0.18);
+                          padding:6px 14px;
+                          border-radius:20px;
+                          display:inline-block;
+                        ">${formatTime(orderTime)}</p>
+                      </td>
+                      <td style="
+                        text-align:center;
+                        width:50%;
+                        padding:0 8px;
+                        border-left:1px solid rgba(255,255,255,0.3);
+                      ">
+                        <p style="margin:0;font-size:12px;opacity:0.85;text-transform:uppercase;letter-spacing:1px;">Estimated Arrival</p>
+                        <p style="
+                          margin:6px 0 0;
+                          font-size:18px;
+                          font-weight:700;
+                          background:rgba(255,255,255,0.18);
+                          padding:6px 14px;
+                          border-radius:20px;
+                          display:inline-block;
+                        ">${formatTime(estimatedDelivery)}</p>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+
+            <!-- Delivery Progress -->
+            <p style="
+              font-size:13px;
+              font-weight:700;
+              color:#ff8c42;
+              text-transform:uppercase;
+              letter-spacing:1px;
+              margin:0 0 10px;
+            ">Delivery Status</p>
+            <div style="
+              background:#ffe5d6;
+              border-radius:20px;
+              overflow:hidden;
+              height:14px;
+              margin-bottom:8px;
+            ">
+              <div style="
+                width:70%;
+                height:100%;
+                background:linear-gradient(90deg,#ffb347,#ff8c42);
+                border-radius:20px;
+              "></div>
+            </div>
+            <p style="font-size:13px;color:#888;text-align:center;margin:0 0 24px;">
+              🟠 Order Confirmed &nbsp;→&nbsp; 🚚 Out for Delivery &nbsp;→&nbsp; 📦 Arriving Soon
+            </p>
+
+            <!-- Need Help -->
+            <div style="
+              background:#fff8f2;
+              border:1px solid #ffe0cc;
+              border-radius:10px;
+              padding:14px 18px;
+              font-size:13px;
+              color:#666;
+              line-height:1.7;
+            ">
+              <strong style="color:#ff8c42;">Need help?</strong>
+              Contact us at
+              <a href="tel:01748399860" style="color:#ff8c42;text-decoration:none;font-weight:600;">01748399860</a>
+              or email
+              <a href="mailto:support@imall.com" style="color:#ff8c42;text-decoration:none;font-weight:600;">support@imall.com</a>
+            </div>
+
+          </td>
+        </tr>
+
+        <!-- FOOTER -->
+        <tr>
+          <td style="
+            background:#fff8f2;
+            border-top:1px solid #ffe5d0;
+            padding:20px 30px;
+            text-align:center;
+          ">
+            <p style="margin:0;font-size:15px;font-weight:800;color:#ff8c42;">iMall</p>
+            <p style="margin:6px 0 0;font-size:12px;color:#999;line-height:1.8;">
+              📍 Level 4, AQP Shopping Mall, Bailey Road, Ramna, Dhaka-1000<br/>
+              📞 01748399860 &nbsp;·&nbsp; ✉️ support@imall.com
+            </p>
+            <p style="margin:12px 0 0;font-size:11px;color:#bbb;">
+              © ${new Date().getFullYear()} iMall. All rights reserved.
+            </p>
+          </td>
+        </tr>
+
+      </table>
+    </td>
+  </tr>
+</table>
+
+</body>
+</html>`;
+
+    await sendEmail(
+      customerEmail,
+      `Order Placed from I-Mall — Invoice #${invoiceNumber}`,
+      emailBody
+    );
     await sendEmail(
       "shamimrocky801@yahoo.com",
-      `New Order Received #${invoiceNumber}`,
+      `New Order Received — Invoice #${invoiceNumber}`,
       emailBody
     );
 
     return res
       .status(200)
       .json(jsonResponse(true, "Your order has been placed successfully", newOrder));
+
   } catch (error) {
     console.log(error);
     return res.status(500).json(jsonResponse(false, error.message || error, null));
