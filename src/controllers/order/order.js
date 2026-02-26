@@ -392,6 +392,505 @@ const generateInvoiceNumber = async (tx, brandID, productCode) => {
 
 
 
+// export const createOrder = async (req, res) => {
+//   try {
+//     const {
+//       userId,
+//       couponId,
+//       customerName,
+//       customerPhone,
+//       customerAddress,
+//       customerBillingAddress,
+//       customerEmail,
+//       customerCity,
+//       customerPostalCode,
+//       paymentMethod,
+//       deliveryChargeInside,
+//       deliveryChargeOutside,
+//       orderItems,
+//     } = req.body;
+
+//     const inputValidation = validateInput(
+//       [customerName, customerPhone, customerAddress, paymentMethod],
+//       ["Name", "Phone", "Shipping Address", "Payment Method"]
+//     );
+
+//     if (inputValidation) {
+//       return res.status(400).json(jsonResponse(false, inputValidation, null));
+//     }
+
+//     if (!orderItems || orderItems.length === 0) {
+//       return res
+//         .status(400)
+//         .json(jsonResponse(false, "Please select at least 1 item", null));
+//     }
+
+//     const firstItem = orderItems[0];
+
+//     const productInfo = await prisma.product.findFirst({
+//       where: {
+//         id: firstItem.productId,
+//         isDeleted: false,
+//         isActive: true,
+//       },
+//       include: {
+//         brand: true,
+//       },
+//     });
+
+//     if (!productInfo) {
+//       return res
+//         .status(400)
+//         .json(jsonResponse(false, "Product not found", null));
+//     }
+
+//     const invoiceNumber = await generateInvoiceNumber(
+//       prisma,
+//       productInfo.brand?.brandID || "00",
+//       productInfo.productCode || "0000"
+//     );
+
+//     const brandName = productInfo.brand?.name || "iMall";
+
+//     const newOrder = await prisma.$transaction(async (tx) => {
+//       let totalItems = 0;
+//       let subtotal = 0;
+//       let subtotalCost = 0;
+//       let newOrderItems = [];
+
+//       for (const item of orderItems) {
+//         const product = await tx.product.findFirst({
+//           where: {
+//             id: item.productId,
+//             isDeleted: false,
+//             isActive: true,
+//           },
+//           include: {
+//             brand: true,
+//           },
+//         });
+
+//         const productAttribute = await tx.productAttribute.findFirst({
+//           where: {
+//             id: item.productAttributeId,
+//             isDeleted: false,
+//           },
+//         });
+
+//         if (!product || !productAttribute) {
+//           throw new Error("Product or attribute does not exist");
+//         }
+
+//         const totalPrice = item.quantity * productAttribute.discountedRetailPrice;
+//         const totalCostPrice = item.quantity * productAttribute.costPrice;
+
+//         newOrderItems.push({
+//           productId: item.productId,
+//             productCode: item.productCode,  
+
+//           productAttributeId: item.productAttributeId,
+//           name: product.name,
+//           size: productAttribute.size,
+//           costPrice: productAttribute.costPrice,
+//           retailPrice: productAttribute.retailPrice,
+//           discountPercent: productAttribute.discountPercent,
+//           discountPrice: productAttribute.discountPrice,
+//           discountedRetailPrice: productAttribute.discountedRetailPrice,
+//           totalCostPrice,
+//           totalPrice,
+//           quantity: item.quantity,
+//         });
+
+//         totalItems += item.quantity;
+//         subtotal += totalPrice;
+//         subtotalCost += totalCostPrice;
+//       }
+
+//       const coupon = couponId
+//         ? await tx.coupon.findFirst({
+//             where: { id: couponId, isActive: true },
+//           })
+//         : null;
+
+//       const deliveryCharge = deliveryChargeInside ?? deliveryChargeOutside ?? 0;
+//       const finalSubtotal =
+//         subtotal + deliveryCharge - (coupon?.discountAmount ?? 0);
+
+//       const order = await tx.order.create({
+//         data: {
+//           userId,
+//           couponId,
+//           customerName,
+//           customerPhone,
+//           customerAddress,
+//           customerBillingAddress,
+//           customerEmail,
+//           customerCity,
+//           customerPostalCode,
+//           invoiceNumber,
+//           totalItems,
+//           subtotalCost,
+//           subtotal: finalSubtotal,
+//           paymentMethod,
+//           deliveryChargeInside: deliveryChargeInside ?? null,
+//           deliveryChargeOutside: deliveryChargeOutside ?? null,
+//           orderItems: {
+//             create: newOrderItems,
+//           },
+//         },
+//         include: {
+//           orderItems: true,
+//         },
+//       });
+
+//       for (const item of orderItems) {
+//         await tx.productAttribute.update({
+//           where: { id: item.productAttributeId },
+//           data: {
+//             stockAmount: {
+//               decrement: item.quantity,
+//             },
+//           },
+//         });
+//       }
+
+//       return order;
+//     });
+
+//     const orderTime = new Date();
+//     const estimatedDelivery = new Date(orderTime.getTime() + 40 * 60 * 1000);
+
+//     const formatTime = (date) => {
+//       return date.toLocaleTimeString("en-BD", {
+//         hour: "2-digit",
+//         minute: "2-digit",
+//         hour12: true,
+//         timeZone: "Asia/Dhaka",
+//       });
+//     };
+
+//     const deliveryCharge = deliveryChargeInside ?? deliveryChargeOutside ?? 0;
+//     const deliveryLabel = deliveryChargeInside != null ? "Inside Dhaka" : "Outside Dhaka";
+
+//     const emailBody = `
+// <!DOCTYPE html>
+// <html lang="en">
+// <head>
+//   <meta charset="UTF-8" />
+//   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+// </head>
+// <body style="margin:0;padding:0;background:#f0ece8;">
+
+// <table width="100%" cellpadding="0" cellspacing="0" style="background:#f0ece8;padding:30px 0;">
+//   <tr>
+//     <td align="center">
+//       <table width="620" cellpadding="0" cellspacing="0" style="
+//         background:#ffffff;
+//         border-radius:16px;
+//         overflow:hidden;
+//         box-shadow:0 4px 20px rgba(0,0,0,0.07);
+//         font-family:'Segoe UI',Arial,sans-serif;
+//       ">
+
+//         <!-- TOP GRADIENT BAR -->
+//         <tr>
+//           <td style="
+//             background:linear-gradient(135deg,#c8773a,#b5622c);
+//             padding:28px 30px;
+//             text-align:center;
+//           ">
+//             <h1 style="
+//               margin:0;
+//               font-size:36px;
+//               font-weight:900;
+//               color:#ffffff;
+//               letter-spacing:2px;
+//             ">iMall</h1>
+//             <p style="
+//               margin:6px 0 0;
+//               color:rgba(255,255,255,0.82);
+//               font-size:13px;
+//               letter-spacing:0.5px;
+//             ">Genuine Products · Express Delivery</p>
+//           </td>
+//         </tr>
+
+//         <!-- ORDER CONFIRMED BADGE -->
+//         <tr>
+//           <td style="
+//             background:#fdf6f0;
+//             padding:20px 30px;
+//             text-align:center;
+//             border-bottom:1px solid #e8d5c8;
+//           ">
+//             <span style="
+//               display:inline-block;
+//               background:linear-gradient(135deg,#c8773a,#b5622c);
+//               color:#fff;
+//               font-size:13px;
+//               font-weight:700;
+//               padding:6px 20px;
+//               border-radius:30px;
+//               letter-spacing:1px;
+//             ">✔ ORDER CONFIRMED</span>
+//           </td>
+//         </tr>
+
+//         <!-- BODY -->
+//         <tr>
+//           <td style="padding:30px;">
+
+//             <!-- Greeting -->
+//             <p style="font-size:16px;color:#333;margin:0 0 6px;">
+//               Dear <strong style="color:#c8773a;">${customerName}</strong>,
+//             </p>
+//             <p style="font-size:14px;color:#666;line-height:1.7;margin:0 0 24px;">
+//               Thank you for shopping with <strong style="color:#c8773a;">iMall</strong>.
+//               Your order from <strong style="color:#c8773a;">${brandName}</strong> has been
+//               successfully placed and is now being prepared for express delivery.
+//             </p>
+
+//             <!-- Ordered Items Table -->
+//             <p style="
+//               font-size:13px;
+//               font-weight:700;
+//               color:#c8773a;
+//               text-transform:uppercase;
+//               letter-spacing:1px;
+//               margin:0 0 10px;
+//             ">Ordered Items</p>
+
+//             <table width="100%" cellpadding="0" cellspacing="0" style="
+//               border:1px solid #e8d5c8;
+//               border-radius:10px;
+//               overflow:hidden;
+//               font-size:14px;
+//               margin-bottom:24px;
+//             ">
+//               <thead>
+//                 <tr style="background:linear-gradient(135deg,#c8773a,#b5622c);">
+//                   <th style="padding:10px 14px;color:#fff;text-align:left;font-weight:600;">Product</th>
+//                   <th style="padding:10px 14px;color:#fff;text-align:center;font-weight:600;">Size</th>
+//                   <th style="padding:10px 14px;color:#fff;text-align:center;font-weight:600;">Qty</th>
+//                   <th style="padding:10px 14px;color:#fff;text-align:right;font-weight:600;">Unit Price</th>
+//                 </tr>
+//               </thead>
+//               <tbody>
+//                 ${newOrder.orderItems
+//                   .map(
+//                     (item, index) => `
+//                   <tr style="background:${index % 2 === 0 ? "#ffffff" : "#fdf6f0"};">
+//                     <td style="padding:10px 14px;color:#333;">${item.name}</td>
+//                     <td style="padding:10px 14px;color:#555;text-align:center;">${item.size || "—"}</td>
+//                     <td style="padding:10px 14px;color:#555;text-align:center;">${item.quantity}</td>
+//                     <td style="padding:10px 14px;color:#c8773a;font-weight:600;text-align:right;">${item.discountedRetailPrice} TK</td>
+//                   </tr>
+//                 `
+//                   )
+//                   .join("")}
+//               </tbody>
+//             </table>
+
+//             <!-- Order Summary -->
+//             <p style="
+//               font-size:13px;
+//               font-weight:700;
+//               color:#c8773a;
+//               text-transform:uppercase;
+//               letter-spacing:1px;
+//               margin:0 0 10px;
+//             ">Order Summary</p>
+
+//             <table width="100%" cellpadding="0" cellspacing="0" style="
+//               background:#fdf6f0;
+//               border:1px solid #e8d5c8;
+//               border-radius:10px;
+//               overflow:hidden;
+//               font-size:14px;
+//               margin-bottom:24px;
+//             ">
+//               <tr>
+//                 <td style="padding:10px 16px;color:#555;border-bottom:1px solid #e8d5c8;">Invoice No</td>
+//                 <td style="padding:10px 16px;color:#333;font-weight:600;text-align:right;border-bottom:1px solid #e8d5c8;">#${invoiceNumber}</td>
+//               </tr>
+//               <tr>
+//                 <td style="padding:10px 16px;color:#555;border-bottom:1px solid #e8d5c8;">Delivery Address</td>
+//                 <td style="padding:10px 16px;color:#333;text-align:right;border-bottom:1px solid #e8d5c8;">${customerAddress}${customerCity ? `, ${customerCity}` : ""}</td>
+//               </tr>
+//               <tr>
+//                 <td style="padding:10px 16px;color:#555;border-bottom:1px solid #e8d5c8;">Total Items</td>
+//                 <td style="padding:10px 16px;color:#333;font-weight:600;text-align:right;border-bottom:1px solid #e8d5c8;">${newOrder.totalItems}</td>
+//               </tr>
+//               <tr>
+//                 <td style="padding:10px 16px;color:#555;border-bottom:1px solid #e8d5c8;">Payment Method</td>
+//                 <td style="padding:10px 16px;color:#333;text-align:right;border-bottom:1px solid #e8d5c8;">${paymentMethod}</td>
+//               </tr>
+//               <tr>
+//                 <td style="padding:10px 16px;color:#555;border-bottom:1px solid #e8d5c8;">
+//                   Delivery Charge
+//                   <span style="
+//                     font-size:11px;
+//                     color:#fff;
+//                     background:#c8773a;
+//                     padding:2px 8px;
+//                     border-radius:10px;
+//                     margin-left:6px;
+//                     font-weight:600;
+//                   ">${deliveryLabel}</span>
+//                 </td>
+//                 <td style="padding:10px 16px;color:#333;font-weight:600;text-align:right;border-bottom:1px solid #e8d5c8;">${deliveryCharge} TK</td>
+//               </tr>
+//               <tr>
+//                 <td style="padding:12px 16px;color:#333;font-weight:700;font-size:15px;">Total Amount</td>
+//                 <td style="padding:12px 16px;color:#c8773a;font-weight:800;font-size:16px;text-align:right;">${newOrder.subtotal} TK</td>
+//               </tr>
+//             </table>
+
+//             <!-- Delivery Time Box -->
+//             <table width="100%" cellpadding="0" cellspacing="0" style="
+//               background:linear-gradient(135deg,#c8773a,#b5622c);
+//               border-radius:12px;
+//               overflow:hidden;
+//               margin-bottom:24px;
+//             ">
+//               <tr>
+//                 <td style="padding:22px;text-align:center;color:#fff;">
+//                   <div style="font-size:36px;margin-bottom:8px;">⏰</div>
+//                   <p style="margin:0;font-size:15px;font-weight:700;letter-spacing:0.5px;">
+//                     Express Delivery — 30 to 40 Minutes
+//                   </p>
+//                   <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:16px;">
+//                     <tr>
+//                       <td style="text-align:center;width:50%;padding:0 8px;">
+//                         <p style="margin:0;font-size:12px;opacity:0.85;text-transform:uppercase;letter-spacing:1px;">Order Placed At</p>
+//                         <p style="
+//                           margin:6px 0 0;
+//                           font-size:18px;
+//                           font-weight:700;
+//                           background:rgba(255,255,255,0.18);
+//                           padding:6px 14px;
+//                           border-radius:20px;
+//                           display:inline-block;
+//                         ">${formatTime(orderTime)}</p>
+//                       </td>
+//                       <td style="
+//                         text-align:center;
+//                         width:50%;
+//                         padding:0 8px;
+//                         border-left:1px solid rgba(255,255,255,0.3);
+//                       ">
+//                         <p style="margin:0;font-size:12px;opacity:0.85;text-transform:uppercase;letter-spacing:1px;">Estimated Arrival</p>
+//                         <p style="
+//                           margin:6px 0 0;
+//                           font-size:18px;
+//                           font-weight:700;
+//                           background:rgba(255,255,255,0.18);
+//                           padding:6px 14px;
+//                           border-radius:20px;
+//                           display:inline-block;
+//                         ">${formatTime(estimatedDelivery)}</p>
+//                       </td>
+//                     </tr>
+//                   </table>
+//                 </td>
+//               </tr>
+//             </table>
+
+//             <!-- Delivery Progress -->
+//             <p style="
+//               font-size:13px;
+//               font-weight:700;
+//               color:#c8773a;
+//               text-transform:uppercase;
+//               letter-spacing:1px;
+//               margin:0 0 10px;
+//             ">Delivery Status</p>
+//             <div style="
+//               background:#e8d5c8;
+//               border-radius:20px;
+//               overflow:hidden;
+//               height:14px;
+//               margin-bottom:8px;
+//             ">
+//               <div style="
+//                 width:70%;
+//                 height:100%;
+//                 background:linear-gradient(90deg,#c8773a,#b5622c);
+//                 border-radius:20px;
+//               "></div>
+//             </div>
+//             <p style="font-size:13px;color:#888;text-align:center;margin:0 0 24px;">
+//               🟤 Order Confirmed &nbsp;→&nbsp; 🚚 Out for Delivery &nbsp;→&nbsp; 📦 Arriving Soon
+//             </p>
+
+//             <!-- Need Help -->
+//             <div style="
+//               background:#fdf6f0;
+//               border:1px solid #e8d5c8;
+//               border-radius:10px;
+//               padding:14px 18px;
+//               font-size:13px;
+//               color:#666;
+//               line-height:1.7;
+//             ">
+//               <strong style="color:#c8773a;">Need help?</strong>
+//               Contact us at
+//               <a href="tel:01748399860" style="color:#c8773a;text-decoration:none;font-weight:600;">01748399860</a>
+//               or email
+//               <a href="mailto:support@imall.com" style="color:#c8773a;text-decoration:none;font-weight:600;">support@imall.com</a>
+//             </div>
+
+//           </td>
+//         </tr>
+
+//         <!-- FOOTER -->
+//         <tr>
+//           <td style="
+//             background:#fdf6f0;
+//             border-top:1px solid #e8d5c8;
+//             padding:20px 30px;
+//             text-align:center;
+//           ">
+//             <p style="margin:0;font-size:15px;font-weight:800;color:#c8773a;">iMall</p>
+//             <p style="margin:6px 0 0;font-size:12px;color:#999;line-height:1.8;">
+//               📍 Level 4, AQP Shopping Mall, Bailey Road, Ramna, Dhaka-1000<br/>
+//               📞 01748399860 &nbsp;·&nbsp; ✉️ support@imall.com
+//             </p>
+//             <p style="margin:12px 0 0;font-size:11px;color:#bbb;">
+//               © ${new Date().getFullYear()} iMall. All rights reserved.
+//             </p>
+//           </td>
+//         </tr>
+
+//       </table>
+//     </td>
+//   </tr>
+// </table>
+
+// </body>
+// </html>`;
+
+//     await sendEmail(
+//       customerEmail,
+//       `Order Placed from I-Mall — Invoice #${invoiceNumber}`,
+//       emailBody
+//     );
+//     await sendEmail(
+//       "shamimrocky801@yahoo.com",
+//       `New Order Received — Invoice #${invoiceNumber}`,
+//       emailBody
+//     );
+
+//     return res
+//       .status(200)
+//       .json(jsonResponse(true, "Your order has been placed successfully", newOrder));
+
+//   } catch (error) {
+//     console.log(error);
+//     return res.status(500).json(jsonResponse(false, error.message || error, null));
+//   }
+// };
+
 export const createOrder = async (req, res) => {
   try {
     const {
@@ -486,8 +985,7 @@ export const createOrder = async (req, res) => {
 
         newOrderItems.push({
           productId: item.productId,
-            productCode: item.productCode,  // ⭐ এই line টা আছে কিনা check করুন, না থাকলে add করুন
-
+          productCode: product.productCode, // ✅ fixed: product.productCode (DB থেকে)
           productAttributeId: item.productAttributeId,
           name: product.name,
           size: productAttribute.size,
@@ -556,6 +1054,8 @@ export const createOrder = async (req, res) => {
 
       return order;
     });
+
+    newOrder.brandName = brandName; // ✅ fixed: PDF ও email এ brandName আসবে
 
     const orderTime = new Date();
     const estimatedDelivery = new Date(orderTime.getTime() + 40 * 60 * 1000);
@@ -890,6 +1390,7 @@ export const createOrder = async (req, res) => {
     return res.status(500).json(jsonResponse(false, error.message || error, null));
   }
 };
+
 
 
 
