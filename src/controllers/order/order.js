@@ -906,6 +906,7 @@ export const createOrder = async (req, res) => {
       paymentMethod,
       deliveryChargeInside,
       deliveryChargeOutside,
+      platformCharge, // ✅ NEW
       orderItems,
     } = req.body;
 
@@ -925,7 +926,6 @@ export const createOrder = async (req, res) => {
         .json(jsonResponse(false, "Please select at least 1 item", null));
     }
 
-    // ✅ Get first product for invoice generation
     const firstItem = orderItems?.[0];
 
     const productInfo = await prisma.product.findFirst({
@@ -945,14 +945,12 @@ export const createOrder = async (req, res) => {
         .json(jsonResponse(false, "Product not found", null));
     }
 
-    // ✅ Generate Invoice
     const invoiceNumber = await generateInvoiceNumber(
       prisma,
       productInfo.brand?.brandID || "00",
       productInfo.productCode || "0000"
     );
 
-    // ✅ Transaction Block
     const newOrder = await prisma.$transaction(async (tx) => {
       let totalItems = 0;
       let subtotal = 0;
@@ -988,29 +986,21 @@ export const createOrder = async (req, res) => {
         const totalCostPrice =
           item.quantity * productAttribute.costPrice;
 
-        // ✅ OrderItem Snapshot
         newOrderItems.push({
           productId: item.productId,
-
           productCode: product.productCode || null,
           barcode: product.barcode || null,
-
           brandId: product.brandId || null,
           brandName: product.brand?.name || null,
-
           productAttributeId: item.productAttributeId,
-
           name: product.name,
           size: productAttribute.size,
-
           costPrice: productAttribute.costPrice,
           retailPrice: productAttribute.retailPrice,
-
           discountPercent: productAttribute.discountPercent,
           discountPrice: productAttribute.discountPrice,
           discountedRetailPrice:
             productAttribute.discountedRetailPrice,
-
           totalCostPrice,
           totalPrice,
           quantity: item.quantity,
@@ -1021,7 +1011,6 @@ export const createOrder = async (req, res) => {
         subtotalCost += totalCostPrice;
       }
 
-      // ✅ Coupon Logic
       const coupon = couponId
         ? await tx.coupon.findFirst({
             where: { id: couponId, isActive: true },
@@ -1031,10 +1020,14 @@ export const createOrder = async (req, res) => {
       const deliveryCharge =
         deliveryChargeInside ?? deliveryChargeOutside ?? 0;
 
-      const finalSubtotal =
-        subtotal + deliveryCharge - (coupon?.discountAmount ?? 0);
+      const safePlatformCharge = Number(platformCharge) || 0; // ✅ NEW
 
-      // ✅ Create Order
+      const finalSubtotal =
+        subtotal +
+        deliveryCharge +
+        safePlatformCharge - // ✅ platformCharge add
+        (coupon?.discountAmount ?? 0);
+
       const order = await tx.order.create({
         data: {
           userId,
@@ -1055,6 +1048,7 @@ export const createOrder = async (req, res) => {
           paymentMethod,
           deliveryChargeInside: deliveryChargeInside ?? null,
           deliveryChargeOutside: deliveryChargeOutside ?? null,
+          platformCharge: safePlatformCharge, // ✅ SAVE
 
           orderItems: {
             create: newOrderItems,
@@ -1065,7 +1059,6 @@ export const createOrder = async (req, res) => {
         },
       });
 
-      // ✅ Stock Update
       for (const item of orderItems) {
         await tx.productAttribute.update({
           where: { id: item.productAttributeId },
