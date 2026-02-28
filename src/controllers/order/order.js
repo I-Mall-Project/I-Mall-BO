@@ -1253,6 +1253,8 @@ export const createOrder = async (req, res) => {
                   ">${deliveryLabel}</span>
                 </td>
                 <td style="padding:10px 16px;color:#333;font-weight:600;text-align:right;border-bottom:1px solid #e8d5c8;">${deliveryCharge} TK</td>
+                <td style="padding:10px 16px;color:#333;font-weight:600;text-align:right;border-bottom:1px solid #e8d5c8;">${platformCharge} TK</td>
+
               </tr>
               <tr>
                 <td style="padding:12px 16px;color:#333;font-weight:700;font-size:15px;">Total Amount</td>
