@@ -1253,9 +1253,29 @@ export const createOrder = async (req, res) => {
                   ">${deliveryLabel}</span>
                 </td>
                 <td style="padding:10px 16px;color:#333;font-weight:600;text-align:right;border-bottom:1px solid #e8d5c8;">${deliveryCharge} TK</td>
+
+              </tr>
+
+                   <tr>
+                <td style="padding:10px 16px;color:#555;border-bottom:1px solid #e8d5c8;">
+                   Platform Charge
+                  <span style="
+                    font-size:11px;
+                    color:#fff;
+                    background:#c8773a;
+                    padding:2px 8px;
+                    border-radius:10px;
+                    margin-left:6px;
+                    font-weight:600;
+                  ">${platformChargeLabel}</span>
+                </td>
                 <td style="padding:10px 16px;color:#333;font-weight:600;text-align:right;border-bottom:1px solid #e8d5c8;">${platformCharge} TK</td>
 
               </tr>
+              <tr>
+
+
+
               <tr>
                 <td style="padding:12px 16px;color:#333;font-weight:700;font-size:15px;">Total Amount</td>
                 <td style="padding:12px 16px;color:#c8773a;font-weight:800;font-size:16px;text-align:right;">${newOrder.subtotal} TK</td>
