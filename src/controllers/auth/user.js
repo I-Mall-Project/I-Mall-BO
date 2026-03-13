@@ -5,7 +5,6 @@ import validateInput from "../../utils/validateInput.js";
 
 const module_name = "user";
 
-//get all users
 export const getUsers = async (req, res) => {
   if (req.user.roleName !== "super-admin") {
     getUsersByUser(req, res);
@@ -30,12 +29,6 @@ export const getUsers = async (req, res) => {
             {
               phone: {
                 contains: req.query.phone,
-                mode: "insensitive",
-              },
-            },
-            {
-              address: {
-                contains: req.query.address,
                 mode: "insensitive",
               },
             },
