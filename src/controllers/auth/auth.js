@@ -4,105 +4,216 @@ import jsonResponse from "../../utils/jsonResponse.js";
 import jwtSign from "../../utils/jwtSign.js";
 import prisma from "../../utils/prismaClient.js";
 import validateInput from "../../utils/validateInput.js";
+import uploadToCLoudinary from "../../utils/uploadToCloudinary.js";
+
 
 const module_name = "auth";
 
 //register
+// export const register = async (req, res) => {
+//   try {
+//     return await prisma.$transaction(async (tx) => {
+//       //Check user if exists
+//       const user = await tx.user.findFirst({
+//         where: {
+//           OR: [{ email: req.body.email }, { phone: req.body.phone }],
+//           isDeleted: false,
+//         },
+//       });
+
+//       if (user) {
+//         return res
+//           .status(409)
+//           .json(jsonResponse(false, "User already exists", null));
+//       }
+
+//       //Create a new user and Hash the password
+//       // const hashedPassword = hashPassword(req.body.password);
+
+//       const {
+//         roleId,
+//         parentId,
+//         name,
+//         email,
+//         phone,
+//         address,
+//         billingAddress,
+//         country,
+//         city,
+//         postalCode,
+//         image,
+//         // password,
+//         otp,
+//         otpCount,
+//         initialPaymentAmount,
+//         initialPaymentDue,
+//         installmentTime,
+//       } = req.body;
+
+//       console.log(req.body);
+
+//       //validate input
+//       const inputValidation = validateInput(
+//         [name, email, phone, address, billingAddress, country, city],
+//         [
+//           "Name",
+//           "Email",
+//           "Phone",
+//           "Shipping Address",
+//           "Billing Address",
+//           "Country",
+//           "City",
+//         ]
+//       );
+
+//       if (inputValidation) {
+//         return res.status(400).json(jsonResponse(false, inputValidation, null));
+//       }
+
+//       //create user
+//       const createUser = await tx.user.create({
+//         data: {
+//           roleId,
+//           parentId,
+//           name,
+//           email,
+//           phone,
+//           address,
+//           billingAddress,
+//           country,
+//           city,
+//           postalCode,
+//           image: "https://cdn-icons-png.flaticon.com/512/9368/9368192.png",
+//           // password: hashedPassword,
+//           otp,
+//           otpCount,
+//           initialPaymentAmount,
+//           initialPaymentDue,
+//           installmentTime,
+//           createdBy: req?.user?.id,
+//         },
+//       });
+
+//       console.log({ createUser });
+
+//       if (createUser) {
+//         return res
+//           .status(200)
+//           .json(jsonResponse(true, "User has been created", createUser));
+//       }
+//     });
+//   } catch (error) {
+//     console.log(error);
+//     return res.status(500).json(jsonResponse(false, error, null));
+//   }
+// };
+
+
 export const register = async (req, res) => {
   try {
     return await prisma.$transaction(async (tx) => {
-      //Check user if exists
-      const user = await tx.user.findFirst({
+      // Check if user exists
+      const existingUser = await tx.user.findFirst({
         where: {
           OR: [{ email: req.body.email }, { phone: req.body.phone }],
           isDeleted: false,
         },
       });
 
-      if (user) {
+      if (existingUser) {
         return res
           .status(409)
           .json(jsonResponse(false, "User already exists", null));
       }
 
-      //Create a new user and Hash the password
-      // const hashedPassword = hashPassword(req.body.password);
-
+      // Destructure body
       const {
         roleId,
         parentId,
         name,
         email,
         phone,
-        address,
-        billingAddress,
-        country,
-        city,
-        postalCode,
-        image,
-        // password,
+        presentAddress,
+        permanentAddress,
+        nidNo,
+        password,
         otp,
         otpCount,
-        initialPaymentAmount,
-        initialPaymentDue,
-        installmentTime,
       } = req.body;
 
-      console.log(req.body);
-
-      //validate input
+      // Validate required fields
       const inputValidation = validateInput(
-        [name, email, phone, address, billingAddress, country, city],
-        [
-          "Name",
-          "Email",
-          "Phone",
-          "Shipping Address",
-          "Billing Address",
-          "Country",
-          "City",
-        ]
+        [name, email, phone, presentAddress, permanentAddress, nidNo, password],
+        ["Name", "Email", "Phone", "Present Address", "Permanent Address", "NID No", "Password"]
       );
-
       if (inputValidation) {
         return res.status(400).json(jsonResponse(false, inputValidation, null));
       }
 
-      //create user
+      // Prepare user data
+      const userData = {
+        roleId,
+        parentId,
+        name,
+        email,
+        phone,
+        presentAddress,
+        permanentAddress,
+        nidNo,
+        password,
+        otp,
+        otpCount,
+        createdBy: req?.user?.id,
+      };
+
+      // ✅ Handle multiple NID attachment uploads
+      if (req.files?.nidAttachment && req.files.nidAttachment.length > 0) {
+        const nidUploadPromises = req.files.nidAttachment.map(
+          (file) =>
+            new Promise((resolve, reject) => {
+              uploadToCLoudinary(file, "user_module", (err, result) => {
+                if (err) reject(err);
+                else resolve(result);
+              });
+            })
+        );
+
+        const nidUploadResults = await Promise.all(nidUploadPromises);
+
+        const nidUrls = nidUploadResults.map((result) => {
+          if (!result?.secure_url) throw new Error("NID upload failed");
+          return result.secure_url;
+        });
+
+        userData.nidAttachment = nidUrls;
+      }
+
+      // ✅ Handle Passport photo upload
+      if (req.files?.passportPhoto && req.files.passportPhoto.length > 0) {
+        const uploadResult = await new Promise((resolve, reject) => {
+          uploadToCLoudinary(req.files.passportPhoto[0], "user_module", (err, result) => {
+            if (err) reject(err);
+            else resolve(result);
+          });
+        });
+        if (!uploadResult?.secure_url) {
+          throw new Error("Passport photo upload failed");
+        }
+        userData.passportPhoto = uploadResult.secure_url;
+      }
+
+      // Create user
       const createUser = await tx.user.create({
-        data: {
-          roleId,
-          parentId,
-          name,
-          email,
-          phone,
-          address,
-          billingAddress,
-          country,
-          city,
-          postalCode,
-          image: "https://cdn-icons-png.flaticon.com/512/9368/9368192.png",
-          // password: hashedPassword,
-          otp,
-          otpCount,
-          initialPaymentAmount,
-          initialPaymentDue,
-          installmentTime,
-          createdBy: req?.user?.id,
-        },
+        data: userData,
       });
 
-      console.log({ createUser });
-
-      if (createUser) {
-        return res
-          .status(200)
-          .json(jsonResponse(true, "User has been created", createUser));
-      }
+      return res
+        .status(200)
+        .json(jsonResponse(true, "User has been created", createUser));
     });
   } catch (error) {
     console.log(error);
-    return res.status(500).json(jsonResponse(false, error, null));
+    return res.status(500).json(jsonResponse(false, error.message, null));
   }
 };
 

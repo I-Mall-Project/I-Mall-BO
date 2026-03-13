@@ -5,14 +5,11 @@ const validateInput = (inputs, inputNames) => {
   for (var i = 0; i < inputLength; i++) {
     if (Array.isArray(inputs[i])) {
       if (inputs[i].length < 1) {
-        errorMessage = `${inputNames[i]} cannot be empty`;
+        errorMessage += errorMessage.length > 0 ? `, ${inputNames[i]} cannot be empty` : `${inputNames[i]} cannot be empty`;
       }
     } else {
       if (inputs[i] === undefined || inputs[i] === null || inputs[i] === "") {
-        errorMessage =
-          errorMessage + errorMessage.length > 1
-            ? ", "
-            : "" + `${inputNames[i]} cannot be empty`;
+        errorMessage += errorMessage.length > 0 ? `, ${inputNames[i]} cannot be empty` : `${inputNames[i]} cannot be empty`;
       }
     }
   }

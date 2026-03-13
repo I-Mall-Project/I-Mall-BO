@@ -20,6 +20,13 @@ const verify = (req, res, next) => {
 
         const activeUser = await prisma.user.findFirst({
           where: { id: req.user.id, isDeleted: false },
+          select: {
+            id: true,
+            roleId: true,
+            parentId: true,
+            isActive: true,
+            isDeleted: true,
+          },
         });
 
         if (!activeUser) {
@@ -85,7 +92,6 @@ const verify = (req, res, next) => {
         }
 
         //check if user is active or banned
-
         if (!activeUser.isActive) {
           return res
             .clearCookie("accessToken", {

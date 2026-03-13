@@ -76,6 +76,11 @@ model User {
   deletedBy            String?
   createdAt            DateTime   @default(now())
   updatedAt            DateTime   @updatedAt
+  presentAddress       String?
+  permanentAddress     String?
+  nidNo                String?    @db.VarChar(50)
+  nidAttachment        String[]   @default([])
+  passportPhoto        String?
   campaigns            Campaign[]
   categories           Category[]
   order                Order[]
