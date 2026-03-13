@@ -187,70 +187,80 @@ export const updateUser = async (req, res) => {
         name,
         email,
         phone,
-        address,
-        billingAddress,
-        city,
-        country,
-        postalCode,
-        image,
-        // password,
-        initialPaymentAmount,
-        initialPaymentDue,
-        installmentTime,
+        presentAddress,
+        permanentAddress,
+        nidNo,
+        password,
       } = req.body;
 
-      //validate input
+      // Validate input
       const inputValidation = validateInput(
-        [name, email, phone, address, billingAddress],
-        ["Name", "Email", "Phone", "Address", "Billing Address"]
+        [name, email, phone, presentAddress, permanentAddress, nidNo],
+        ["Name", "Email", "Phone", "Present Address", "Permanent Address", "NID No"]
       );
 
       if (inputValidation) {
         return res.status(400).json(jsonResponse(false, inputValidation, null));
       }
 
-      //Check user if exists
-      // const user = await tx.user.findFirst({
-      //   where: {
-      //     NOT: [{ id: req.params.id }],
-      //     OR: [{ email: req.body.email }, { phone: req.body.phone }],
-      //     isDeleted: false,
-      //   },
-      // });
+      // Prepare update data
+      const updateData = {
+        roleId,
+        name,
+        email,
+        phone,
+        presentAddress,
+        permanentAddress,
+        nidNo,
+        ...(password && { password }),
+        updatedBy: req.user.id,
+      };
 
-      // if (user) {
-      //   return res
-      //     .status(409)
-      //     .json(jsonResponse(false, "User already exists", null));
-      // }
+      // ✅ Handle multiple NID attachment uploads
+      if (req.files?.nidAttachment && req.files.nidAttachment.length > 0) {
+        const nidUploadPromises = req.files.nidAttachment.map(
+          (file) =>
+            new Promise((resolve, reject) => {
+              uploadToCLoudinary(file, "user_module", (err, result) => {
+                if (err) reject(err);
+                else resolve(result);
+              });
+            })
+        );
 
-      //Hash the password
-      // const hashedPassword = hashPassword(password);
-      const updateUser = await tx.user.update({
+        const nidUploadResults = await Promise.all(nidUploadPromises);
+
+        const nidUrls = nidUploadResults.map((result) => {
+          if (!result?.secure_url) throw new Error("NID upload failed");
+          return result.secure_url;
+        });
+
+        updateData.nidAttachment = nidUrls;
+      }
+
+      // ✅ Handle Passport photo upload
+      if (req.files?.passportPhoto && req.files.passportPhoto.length > 0) {
+        const uploadResult = await new Promise((resolve, reject) => {
+          uploadToCLoudinary(req.files.passportPhoto[0], "user_module", (err, result) => {
+            if (err) reject(err);
+            else resolve(result);
+          });
+        });
+        if (!uploadResult?.secure_url) {
+          throw new Error("Passport photo upload failed");
+        }
+        updateData.passportPhoto = uploadResult.secure_url;
+      }
+
+      const updatedUser = await tx.user.update({
         where: { id: req.params.id },
-        data: {
-          roleId,
-          name,
-          email,
-          phone,
-          address,
-          billingAddress,
-          city,
-          country,
-          postalCode,
-          image,
-          // password: hashedPassword,
-          initialPaymentAmount,
-          initialPaymentDue,
-          installmentTime,
-          updatedBy: req.user.id,
-        },
+        data: updateData,
       });
 
-      if (updateUser) {
+      if (updatedUser) {
         return res
           .status(200)
-          .json(jsonResponse(true, `Profile has been updated.`, updateUser));
+          .json(jsonResponse(true, `Profile has been updated.`, updatedUser));
       } else {
         return res
           .status(404)
@@ -262,7 +272,6 @@ export const updateUser = async (req, res) => {
     return res.status(500).json(jsonResponse(false, error, null));
   }
 };
-
 //ban user
 export const banUser = async (req, res) => {
   try {
