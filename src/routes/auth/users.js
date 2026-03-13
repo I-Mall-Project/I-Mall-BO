@@ -19,6 +19,13 @@ import verify from "../../utils/verifyToken.js";
 
 const router = express.Router();
 
+import multer from "multer";
+
+const storage = multer.memoryStorage();
+const upload = multer({ storage });
+
+
+
 router.get("/v1/auth/users", usersList, verify, getUsers);
 router.get("/v1/auth/user/users", usersUserList, verify, getUsersByUser);
 router.get("/v1/auth/users/:id", usersSingle, verify, getUser);

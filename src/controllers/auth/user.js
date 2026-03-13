@@ -2,6 +2,8 @@ import { defaultLimit, defaultPage } from "../../utils/defaultData.js";
 import jsonResponse from "../../utils/jsonResponse.js";
 import prisma from "../../utils/prismaClient.js";
 import validateInput from "../../utils/validateInput.js";
+import uploadToCLoudinary from "../../utils/uploadToCloudinary.js";
+
 
 const module_name = "user";
 
