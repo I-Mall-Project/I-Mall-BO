@@ -330,3 +330,49 @@ export const deleteUser = async (req, res) => {
     return res.status(500).json(jsonResponse(false, error, null));
   }
 };
+
+
+
+
+export const getDeliveryMen = async (req, res) => {
+  try {
+    // 1️⃣ Shob delivery man fetch with role table join
+    const deliveryMen = await prisma.user.findMany({
+      where: {
+        role: { name: "Delivery Man" },
+        isActive: true,
+        isDeleted: false,
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+      },
+    });
+
+    // 2️⃣ Ongoing orders fetch (jeita delivered hoy nai)
+    const ongoingOrders = await prisma.order.findMany({
+      where: {
+        status: { not: "DELIVERED" },
+        deliveryManId: { not: null },
+      },
+      select: { deliveryManId: true },
+    });
+
+    const busyDeliveryManIds = ongoingOrders.map(o => o.deliveryManId);
+
+    // 3️⃣ Map available field
+    const availableDeliveryMen = deliveryMen.map(dm => ({
+      ...dm,
+      available: !busyDeliveryManIds.includes(dm.id),
+    }));
+
+    return res.status(200).json({
+      success: true,
+      data: availableDeliveryMen,
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};

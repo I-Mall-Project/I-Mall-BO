@@ -50,49 +50,50 @@ model RoleModule {
 }
 
 model User {
-  id                   String     @id @default(uuid())
-  roleId               String?
-  parentId             String?
-  name                 String
-  email                String
-  phone                String
-  address              String?
-  billingAddress       String?
-  country              String?
-  city                 String?
-  postalCode           String?
-  image                String?    @default("images/user/user.png")
-  password             String?
-  otp                  Int?
-  otpCount             Int?       @default(0)
-  initialPaymentAmount Float?     @default(0)
-  initialPaymentDue    Float?     @default(0)
-  installmentTime      Float?     @default(0)
-  refreshToken         String?
-  isActive             Boolean    @default(true)
-  isDeleted            Boolean    @default(false)
-  createdBy            String?
-  updatedBy            String?
-  deletedBy            String?
-  createdAt            DateTime   @default(now())
-  updatedAt            DateTime   @updatedAt
-  presentAddress       String?
-  permanentAddress     String?
-  nidNo                String?    @db.VarChar(50)
-  nidAttachment        String[]   @default([])
-  passportPhoto        String?
-  campaigns            Campaign[]
-  categories           Category[]
-  order                Order[]
-  payments             Payment[]
-  preorder             Preorder[]
-  products             Product[]
-  review               Review[]
-  suppliers            Supplier[]
-  parent               User?      @relation("ParentIdUserId", fields: [parentId], references: [id])
-  children             User[]     @relation("ParentIdUserId")
-  role                 Role?      @relation(fields: [roleId], references: [id])
-  wishlist             Wishlist[]
+  id                              String     @id @default(uuid())
+  roleId                          String?
+  parentId                        String?
+  name                            String
+  email                           String
+  phone                           String
+  address                         String?
+  billingAddress                  String?
+  country                         String?
+  city                            String?
+  postalCode                      String?
+  image                           String?    @default("images/user/user.png")
+  password                        String?
+  otp                             Int?
+  otpCount                        Int?       @default(0)
+  initialPaymentAmount            Float?     @default(0)
+  initialPaymentDue               Float?     @default(0)
+  installmentTime                 Float?     @default(0)
+  refreshToken                    String?
+  isActive                        Boolean    @default(true)
+  isDeleted                       Boolean    @default(false)
+  createdBy                       String?
+  updatedBy                       String?
+  deletedBy                       String?
+  createdAt                       DateTime   @default(now())
+  updatedAt                       DateTime   @updatedAt
+  presentAddress                  String?
+  permanentAddress                String?
+  nidNo                           String?    @db.VarChar(50)
+  nidAttachment                   String[]   @default([])
+  passportPhoto                   String?
+  campaigns                       Campaign[]
+  categories                      Category[]
+  order                           Order[]
+  Order_Order_deliveryManIdToUser Order[]    @relation("Order_deliveryManIdToUser")
+  payments                        Payment[]
+  preorder                        Preorder[]
+  products                        Product[]
+  review                          Review[]
+  suppliers                       Supplier[]
+  parent                          User?      @relation("ParentIdUserId", fields: [parentId], references: [id])
+  children                        User[]     @relation("ParentIdUserId")
+  role                            Role?      @relation(fields: [roleId], references: [id])
+  wishlist                        Wishlist[]
 }
 
 model Banner {
@@ -302,34 +303,36 @@ model ProductImage {
 }
 
 model Order {
-  id                     String       @id @default(uuid())
-  userId                 String?
-  couponId               String?
-  invoiceNumber          String?      @default(nanoid(6))
-  customerName           String?
-  customerPhone          String?
-  customerAddress        String?
-  customerBillingAddress String?
-  customerEmail          String?
-  customerCity           String?
-  customerPostalCode     String?
-  totalItems             Float
-  subtotalCost           Float
-  subtotal               Float
-  paymentMethod          String?      @default("COD")
-  status                 OrderStatus? @default(PENDING)
-  otp                    String?
-  deliveryChargeInside   Float?
-  deliveryChargeOutside  Float?
-  isDeleted              Boolean      @default(false)
-  createdBy              String?
-  updatedBy              String?
-  createdAt              DateTime     @default(now())
-  updatedAt              DateTime     @updatedAt
-  platformCharge         Decimal      @default(0) @db.Decimal(10, 2)
-  coupon                 Coupon?      @relation(fields: [couponId], references: [id], onDelete: Cascade)
-  user                   User?        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  orderItems             OrderItem[]
+  id                             String       @id @default(uuid())
+  userId                         String?
+  couponId                       String?
+  invoiceNumber                  String?      @default(nanoid(6))
+  customerName                   String?
+  customerPhone                  String?
+  customerAddress                String?
+  customerBillingAddress         String?
+  customerEmail                  String?
+  customerCity                   String?
+  customerPostalCode             String?
+  totalItems                     Float
+  subtotalCost                   Float
+  subtotal                       Float
+  paymentMethod                  String?      @default("COD")
+  status                         OrderStatus? @default(PENDING)
+  otp                            String?
+  deliveryChargeInside           Float?
+  deliveryChargeOutside          Float?
+  isDeleted                      Boolean      @default(false)
+  createdBy                      String?
+  updatedBy                      String?
+  createdAt                      DateTime     @default(now())
+  updatedAt                      DateTime     @updatedAt
+  platformCharge                 Decimal      @default(0) @db.Decimal(10, 2)
+  deliveryManId                  String?
+  coupon                         Coupon?      @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  user                           User?        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  User_Order_deliveryManIdToUser User?        @relation("Order_deliveryManIdToUser", fields: [deliveryManId], references: [id], onUpdate: NoAction, map: "fk_deliveryMan")
+  orderItems                     OrderItem[]
 }
 
 model OrderItem {

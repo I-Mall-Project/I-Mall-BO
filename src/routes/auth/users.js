@@ -40,4 +40,9 @@ router.put("/v1/auth/users/:id", upload.fields([
 router.get("/v1/customer/auth/users/:id", verify, getUser);
 router.put("/v1/customer/auth/users/:id", verify, updateUser);
 
+
+
+router.get("/v1/auth/deliveryMen", verify, getDeliveryMen);
+
+
 export default router;
