@@ -6,6 +6,7 @@ import {
   getUsers,
   getUsersByUser,
   updateUser,
+  getDeliveryMen
 } from "../../controllers/auth/user.js";
 import {
   usersBan,
