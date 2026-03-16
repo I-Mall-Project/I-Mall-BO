@@ -1724,103 +1724,7 @@ export const getOrdersSsl = async (req, res) => {
   }
 };
 
-// //get all orders
-// export const getOrders = async (req, res) => {
-//   if (req.user.roleName !== "super-admin") {
-//     getOrdersByUser(req, res);
-//   } else {
-//     try {
-//       const orders = await prisma.order.findMany({
-//         where: {
-//           isDeleted: false,
-//           // AND: [
-//           //   {
-//           //     customerName: {
-//           //       contains: req.query.customer_name,
-//           //       mode: "insensitive",
-//           //     },
-//           //   },
-//           //   {
-//           //     customerPhone: {
-//           //       contains: req.query.customer_phone,
-//           //       mode: "insensitive",
-//           //     },
-//           //   },
-//           //   {
-//           //     customerAddress: {
-//           //       contains: req.query.customer_address,
-//           //       mode: "insensitive",
-//           //     },
-//           //   },
-//           //   {
-//           //     customerCity: {
-//           //       contains: req.query.customer_city,
-//           //       mode: "insensitive",
-//           //     },
-//           //   },
-//           //   {
-//           //     customerPostalCode: {
-//           //       contains: req.query.customer_postal_code,
-//           //       mode: "insensitive",
-//           //     },
-//           //   },
-//           //   {
-//           //     invoiceNumber: {
-//           //       contains: req.query.invoice_number,
-//           //       mode: "insensitive",
-//           //     },
-//           //   },
-//           //   {
-//           //     paymentMethod: {
-//           //       contains: req.query.payment_method,
-//           //       mode: "insensitive",
-//           //     },
-//           //   },
-//           //   {
-//           //     status: {
-//           //       contains: req.query.status,
-//           //       mode: "insensitive",
-//           //     },
-//           //   },
-//           // ],
-//         },
-//         include: {
-//           orderItems: true,
-//         },
-//         orderBy: {
-//           createdAt: "desc",
-//         },
-//         skip:
-//           req.query.limit && req.query.page
-//             ? parseInt(req.query.limit * (req.query.page - 1))
-//             : parseInt(defaultLimit() * (defaultPage() - 1)),
-//         take: req.query.limit
-//           ? parseInt(req.query.limit)
-//           : parseInt(defaultLimit()),
-//       });
-
-//       if (orders.length === 0)
-//         return res
-//           .status(200)
-//           .json(jsonResponse(true, "No order is available", null));
-
-//       if (orders) {
-//         return res
-//           .status(200)
-//           .json(jsonResponse(true, `${orders.length} orders found`, orders));
-//       } else {
-//         return res
-//           .status(404)
-//           .json(jsonResponse(false, "Something went wrong. Try again", null));
-//       }
-//     } catch (error) {
-//       console.log(error);
-//       return res.status(500).json(jsonResponse(false, error, null));
-//     }
-//   }
-// };
-
-//get all orders
+// get all orders
 export const getOrders = async (req, res) => {
   if (req.user.roleName !== "super-admin") {
     return getOrdersByUser(req, res);
@@ -1835,9 +1739,18 @@ export const getOrders = async (req, res) => {
             include: {
               product: {
                 include: {
-                  images: true, // include product images
+                  images: true,
                 },
               },
+            },
+          },
+          // ✅ Delivery man info include
+          User_Order_deliveryManIdToUser: {
+            select: {
+              id: true,
+              name: true,
+              phone: true,
+              email: true,
             },
           },
         },
@@ -1852,34 +1765,31 @@ export const getOrders = async (req, res) => {
           ? parseInt(req.query.limit)
           : parseInt(defaultLimit()),
       });
-
+ 
       if (!orders || orders.length === 0) {
         return res
           .status(200)
           .json(jsonResponse(true, "No order is available", null));
       }
-
-      // Map orderItems to include first image only
+ 
+      // ✅ Map orders — image + delivery man name flatten করা
       const ordersWithImages = orders.map((order) => ({
         ...order,
         orderItems: order.orderItems.map((item) => ({
           ...item,
           image: item.product?.images?.length > 0 ? item.product.images[0].image : null,
         })),
+        // ✅ Delivery man flat fields
+        deliveryManName:  order.User_Order_deliveryManIdToUser?.name  || null,
+        deliveryManPhone: order.User_Order_deliveryManIdToUser?.phone || null,
       }));
-
+ 
       return res.status(200).json(
-        jsonResponse(
-          true,
-          `${ordersWithImages.length} orders found`,
-          ordersWithImages
-        )
+        jsonResponse(true, `${ordersWithImages.length} orders found`, ordersWithImages)
       );
     } catch (error) {
       console.log(error);
-      return res
-        .status(500)
-        .json(jsonResponse(false, "Something went wrong. Try again", null));
+      return res.status(500).json(jsonResponse(false, "Something went wrong. Try again", null));
     }
   }
 };
