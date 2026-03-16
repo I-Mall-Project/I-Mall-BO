@@ -46,9 +46,9 @@ router.get("/v1/orders/month-wise/:year", verify, getMonthlyOrderCountYearWise);
 router.post("/v1/orders/assign-delivery-man", verify, assignDeliveryManToOrder);
 
 // 2️⃣ Delivery man sees only their assigned orders
-router.get("/v1/orders/delivery-man", verify, getOrdersForDeliveryMan);
+router.get("/v1/orders/delivery-man", getOrdersForDeliveryMan);
 
 // 3️⃣ Delivery man updates order status
-router.put("/v1/orders/delivery-man/:id/status", verify, updateOrderStatusByDeliveryMan);
+router.put("/v1/orders/delivery-man/:id/status",  updateOrderStatusByDeliveryMan);
 
 export default router;
