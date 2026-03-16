@@ -329,6 +329,8 @@ model Order {
   updatedAt                      DateTime     @updatedAt
   platformCharge                 Decimal      @default(0) @db.Decimal(10, 2)
   deliveryManId                  String?
+  assignedAt                     DateTime?    @db.Timestamp(6)
+  deliveredAt                    DateTime?    @db.Timestamp(6)
   coupon                         Coupon?      @relation(fields: [couponId], references: [id], onDelete: Cascade)
   user                           User?        @relation(fields: [userId], references: [id], onDelete: Cascade)
   User_Order_deliveryManIdToUser User?        @relation("Order_deliveryManIdToUser", fields: [deliveryManId], references: [id], onUpdate: NoAction, map: "fk_deliveryMan")
