@@ -2747,20 +2747,24 @@ export const getMonthlyOrderCountYearWise = async (req, res) => {
 
 // delivery man
 
+// ✅ 1️⃣ Assign delivery man — assignedAt set করো
 export const assignDeliveryManToOrder = async (req, res) => {
   try {
     const { orderId, deliveryManId } = req.body;
-
+ 
     if (!orderId || !deliveryManId) {
       return res.status(400).json(jsonResponse(false, "Order ID and Delivery Man ID are required", null));
     }
-
+ 
     const order = await prisma.order.update({
       where: { id: orderId },
-      data: { deliveryManId },
+      data: {
+        deliveryManId,
+        assignedAt: new Date(), // ✅ assign time save
+      },
       include: { user: true, orderItems: true },
     });
-
+ 
     // send email to delivery man
     if (order && order.deliveryManId) {
       const deliveryMan = await prisma.user.findUnique({ where: { id: deliveryManId } });
@@ -2775,8 +2779,46 @@ export const assignDeliveryManToOrder = async (req, res) => {
         await sendEmail(deliveryMan.email, `New Order Assigned — Invoice #${order.invoiceNumber}`, emailBody);
       }
     }
-
+ 
     return res.status(200).json(jsonResponse(true, "Delivery man assigned successfully", order));
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json(jsonResponse(false, error.message || error, null));
+  }
+};
+ 
+ 
+// ✅ 2️⃣ Delivery man status update — DELIVERED হলে deliveredAt set করো
+export const updateOrderStatusByDeliveryMan = async (req, res) => {
+  try {
+    const deliveryManId = req.user.id;
+    const { id } = req.params;
+    const { status } = req.body;
+ 
+    if (!status) {
+      return res.status(400).json(jsonResponse(false, "Status is required", null));
+    }
+ 
+    const order = await prisma.order.findUnique({ where: { id } });
+ 
+    if (!order) {
+      return res.status(404).json(jsonResponse(false, "Order not found", null));
+    }
+ 
+    if (order.deliveryManId !== deliveryManId) {
+      return res.status(403).json(jsonResponse(false, "You can only update your assigned orders", null));
+    }
+ 
+    const updatedOrder = await prisma.order.update({
+      where: { id },
+      data: {
+        status,
+        // ✅ DELIVERED হলে deliveredAt save করো
+        ...(status === "DELIVERED" && { deliveredAt: new Date() }),
+      },
+    });
+ 
+    return res.status(200).json(jsonResponse(true, "Order status updated successfully", updatedOrder));
   } catch (error) {
     console.log(error);
     return res.status(500).json(jsonResponse(false, error.message || error, null));
@@ -2802,34 +2844,3 @@ export const getOrdersForDeliveryMan = async (req, res) => {
 };
 
 // 3️⃣ Delivery man updates order status
-export const updateOrderStatusByDeliveryMan = async (req, res) => {
-  try {
-    const deliveryManId = req.user.id;
-    const { id } = req.params;
-    const { status } = req.body;
-
-    if (!status) {
-      return res.status(400).json(jsonResponse(false, "Status is required", null));
-    }
-
-    const order = await prisma.order.findUnique({ where: { id } });
-
-    if (!order) {
-      return res.status(404).json(jsonResponse(false, "Order not found", null));
-    }
-
-    if (order.deliveryManId !== deliveryManId) {
-      return res.status(403).json(jsonResponse(false, "You can only update your assigned orders", null));
-    }
-
-    const updatedOrder = await prisma.order.update({
-      where: { id },
-      data: { status },
-    });
-
-    return res.status(200).json(jsonResponse(true, "Order status updated successfully", updatedOrder));
-  } catch (error) {
-    console.log(error);
-    return res.status(500).json(jsonResponse(false, error.message || error, null));
-  }
-};
