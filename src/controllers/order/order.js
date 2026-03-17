@@ -2600,6 +2600,7 @@ export const updateDeliveryLocation = async (req, res) => {
 // GET /v1/track?phone=01XXXXXXXXX
 // ============================================================
 // Haversine formula — দুই GPS point এর মধ্যে দূরত্ব (km)
+// Haversine formula — দুই GPS point এর মধ্যে দূরত্ব (km)
 const haversineDistance = (lat1, lng1, lat2, lng2) => {
   const R    = 6371;
   const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -2610,33 +2611,39 @@ const haversineDistance = (lat1, lng1, lat2, lng2) => {
     Math.sin(dLng / 2) * Math.sin(dLng / 2);
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 };
- 
-// Nominatim দিয়ে address → coordinates
-const geocodeAddress = async (address) => {
-  try {
-    const query    = encodeURIComponent(`${address}, Bangladesh`);
-    const url      = `https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=1`;
-    const response = await fetch(url, {
-      headers: { "User-Agent": "iMall-Delivery/1.0" },
-    });
-    const data = await response.json();
-    if (data && data[0]) {
-      return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
-    }
-    return null;
-  } catch {
-    return null;
+
+// Nominatim দিয়ে address → coordinates — multiple fallback
+const geocodeAddress = async (order) => {
+  const attempts = [
+    // ১. শুধু city
+    order.customerCity,
+    // ২. address এর শেষ ২ part + city
+    order.customerAddress
+      ? [order.customerAddress.split(',').slice(-2).join(',').trim(), order.customerCity].filter(Boolean).join(', ')
+      : null,
+    // ৩. full address
+    [order.customerAddress, order.customerCity].filter(Boolean).join(', '),
+  ].filter(Boolean);
+
+  for (const query of attempts) {
+    try {
+      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query + ', Bangladesh')}&format=json&limit=1&countrycodes=bd`;
+      const response = await fetch(url, { headers: { "User-Agent": "iMall-Delivery/1.0" } });
+      const data = await response.json();
+      if (data?.[0]) return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+    } catch {}
   }
+  return null;
 };
- 
+
 export const trackOrder = async (req, res) => {
   try {
     const { phone } = req.query;
- 
+
     if (!phone) {
       return res.status(400).json({ success: false, message: "Phone number required", data: null });
     }
- 
+
     const order = await prisma.order.findFirst({
       where: { customerPhone: phone, isDeleted: false },
       orderBy: { createdAt: "desc" },
@@ -2647,11 +2654,11 @@ export const trackOrder = async (req, res) => {
         },
       },
     });
- 
+
     if (!order) {
       return res.status(404).json({ success: false, message: "এই নম্বরে কোনো অর্ডার পাওয়া যায়নি", data: null });
     }
- 
+
     // Live location
     let location = null;
     if (order.deliveryManId && (order.status === "SHIPPED" || order.status === "PENDING")) {
@@ -2663,7 +2670,7 @@ export const trackOrder = async (req, res) => {
       `;
       location = loc?.[0] || null;
     }
- 
+
     // ✅ ETA calculation — SHIPPED এবং location থাকলে
     let eta = null;
     if (location && order.status === "SHIPPED") {
@@ -2672,9 +2679,9 @@ export const trackOrder = async (req, res) => {
         order.customerAddress,
         order.customerCity,
       ].filter(Boolean).join(", ");
- 
-      const customerCoords = await geocodeAddress(customerAddress);
- 
+
+      const customerCoords = await geocodeAddress(order);
+
       if (customerCoords) {
         const distanceKm = haversineDistance(
           parseFloat(location.lat),
@@ -2682,12 +2689,12 @@ export const trackOrder = async (req, res) => {
           customerCoords.lat,
           customerCoords.lng
         );
- 
+
         // Dhaka traffic average speed: 20 km/h
         const avgSpeedKmh  = 20;
         const timeHours    = distanceKm / avgSpeedKmh;
         const timeMinutes  = Math.round(timeHours * 60);
- 
+
         eta = {
           distanceKm:   Math.round(distanceKm * 10) / 10, // 1 decimal
           minutes:      timeMinutes,
@@ -2702,7 +2709,7 @@ export const trackOrder = async (req, res) => {
         };
       }
     }
- 
+
     return res.status(200).json({
       success: true,
       message: "Order fetched successfully",
@@ -2727,7 +2734,6 @@ export const trackOrder = async (req, res) => {
     return res.status(500).json({ success: false, message: err.message || "Internal Server Error", data: null });
   }
 };
-
 // ✅ Latest Order Fetch Controller
 export const getLatestOrder = async (req, res) => {
   try {
