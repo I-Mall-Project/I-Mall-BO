@@ -2570,62 +2570,100 @@ export const deleteOrder = async (req, res) => {
 //   }
 // };
 
+// ✅ Delivery man location update করবে
+export const updateDeliveryLocation = async (req, res) => {
+  try {
+    const deliveryManId = req.user.id;
+    const { orderId, lat, lng } = req.body;
+
+    if (!orderId || !lat || !lng) {
+      return res.status(400).json(jsonResponse(false, "orderId, lat, lng required", null));
+    }
+
+    await prisma.$executeRaw`
+      INSERT INTO "DeliveryLocation" ("id", "orderId", "deliveryManId", "lat", "lng", "updatedAt")
+      VALUES (gen_random_uuid()::text, ${orderId}, ${deliveryManId}, ${lat}, ${lng}, NOW())
+      ON CONFLICT ("orderId")
+      DO UPDATE SET "lat" = ${lat}, "lng" = ${lng}, "updatedAt" = NOW(), "deliveryManId" = ${deliveryManId}
+    `;
+
+    return res.status(200).json(jsonResponse(true, "Location updated", null));
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json(jsonResponse(false, error.message || error, null));
+  }
+};
+ 
+ 
+// ============================================================
+// 2️⃣ Customer phone দিয়ে order + live location track করবে (public)
+// GET /v1/track?phone=01XXXXXXXXX
+// ============================================================
 export const trackOrder = async (req, res) => {
   try {
     const { phone } = req.query;
-
-    // 🔴 phone validation
+ 
     if (!phone) {
-      return res.status(400).json({
-        success: false,
-        message: "Customer phone number required",
-        data: null,
-      });
+      return res.status(400).json({ success: false, message: "Phone number required", data: null });
     }
-
-    // 🔍 Find latest order by phone number
+ 
+    // Latest active order খুঁজবে
     const order = await prisma.order.findFirst({
       where: {
         customerPhone: phone,
+        isDeleted: false,
       },
-      orderBy: {
-        createdAt: "desc", // latest order
-      },
+      orderBy: { createdAt: "desc" },
       include: {
         orderItems: true,
+        User_Order_deliveryManIdToUser: {
+          select: { id: true, name: true, phone: true },
+        },
       },
     });
-
+ 
     if (!order) {
-      return res.status(404).json({
-        success: false,
-        message: "No order found with this phone number",
-        data: null,
-      });
+      return res.status(404).json({ success: false, message: "এই নম্বরে কোনো অর্ডার পাওয়া যায়নি", data: null });
     }
-
+ 
+    // Live location খুঁজবে
+    let location = null;
+    if (order.deliveryManId && (order.status === "SHIPPED" || order.status === "PENDING")) {
+      const loc = await prisma.$queryRaw`
+        SELECT "lat", "lng", "updatedAt"
+        FROM "DeliveryLocation"
+        WHERE "orderId" = ${order.id}
+        LIMIT 1
+      `;
+      location = loc?.[0] || null;
+    }
+ 
     return res.status(200).json({
       success: true,
       message: "Order fetched successfully",
       data: {
-        invoice: order.invoiceNumber,
-        status: order.status,
-        updatedAt: order.updatedAt,
-        estimatedDelivery: order.estimatedDelivery,
+        invoice:       order.invoiceNumber,
+        status:        order.status,
+        createdAt:     order.createdAt,
+        assignedAt:    order.assignedAt,
+        deliveredAt:   order.deliveredAt,
+        customerName:  order.customerName,
         customerPhone: order.customerPhone,
-        orderItems: order.orderItems,
+        orderItems:    order.orderItems,
+        deliveryMan: order.User_Order_deliveryManIdToUser
+          ? {
+              name:  order.User_Order_deliveryManIdToUser.name,
+              phone: order.User_Order_deliveryManIdToUser.phone,
+            }
+          : null,
+        location, // { lat, lng, updatedAt } অথবা null
       },
     });
   } catch (err) {
     console.error(err);
-    return res.status(500).json({
-      success: false,
-      message: err.message || "Internal Server Error",
-      data: null,
-    });
+    return res.status(500).json({ success: false, message: err.message || "Internal Server Error", data: null });
   }
 };
-
 
 
 

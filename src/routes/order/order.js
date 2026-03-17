@@ -9,6 +9,7 @@ import {
   getOrders,
   getOrdersByUser,
   updateOrder,
+  updateDeliveryLocation,
   trackOrder,
   paymentCallback,
   verifyPayment,
@@ -46,8 +47,11 @@ router.delete("/v1/orders/:id", verify, deleteOrder);
 
 // ================== Other Routes ==================
 router.post("/v1/verifyPayment", verifyPayment);
+router.post("/v1/delivery/location", verify, updateDeliveryLocation);
+
 router.get("/track", trackOrder);
 router.get("/v1/payment/track", paymentCallback);
 router.get("/fraud-check-order", fraudCheckByOrderPhone);
+
 
 export default router;
