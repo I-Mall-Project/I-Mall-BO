@@ -23,6 +23,7 @@ cloudinary.config({
 // =============================
 const allowedOrigins = [
 "https://i-mall-admin.vercel.app",
+"https://i-mall-fo.vercel.app",
   "http://localhost:3000",
   "http://localhost:3001",
   "https://sandbox.sslcommerz.com",
