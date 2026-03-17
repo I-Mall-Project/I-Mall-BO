@@ -2599,6 +2599,36 @@ export const updateDeliveryLocation = async (req, res) => {
 // 2️⃣ Customer phone দিয়ে order + live location track করবে (public)
 // GET /v1/track?phone=01XXXXXXXXX
 // ============================================================
+// Haversine formula — দুই GPS point এর মধ্যে দূরত্ব (km)
+const haversineDistance = (lat1, lng1, lat2, lng2) => {
+  const R    = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a    =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+ 
+// Nominatim দিয়ে address → coordinates
+const geocodeAddress = async (address) => {
+  try {
+    const query    = encodeURIComponent(`${address}, Bangladesh`);
+    const url      = `https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=1`;
+    const response = await fetch(url, {
+      headers: { "User-Agent": "iMall-Delivery/1.0" },
+    });
+    const data = await response.json();
+    if (data && data[0]) {
+      return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+};
+ 
 export const trackOrder = async (req, res) => {
   try {
     const { phone } = req.query;
@@ -2607,12 +2637,8 @@ export const trackOrder = async (req, res) => {
       return res.status(400).json({ success: false, message: "Phone number required", data: null });
     }
  
-    // Latest active order খুঁজবে
     const order = await prisma.order.findFirst({
-      where: {
-        customerPhone: phone,
-        isDeleted: false,
-      },
+      where: { customerPhone: phone, isDeleted: false },
       orderBy: { createdAt: "desc" },
       include: {
         orderItems: true,
@@ -2626,7 +2652,7 @@ export const trackOrder = async (req, res) => {
       return res.status(404).json({ success: false, message: "এই নম্বরে কোনো অর্ডার পাওয়া যায়নি", data: null });
     }
  
-    // Live location খুঁজবে
+    // Live location
     let location = null;
     if (order.deliveryManId && (order.status === "SHIPPED" || order.status === "PENDING")) {
       const loc = await prisma.$queryRaw`
@@ -2636,6 +2662,45 @@ export const trackOrder = async (req, res) => {
         LIMIT 1
       `;
       location = loc?.[0] || null;
+    }
+ 
+    // ✅ ETA calculation — SHIPPED এবং location থাকলে
+    let eta = null;
+    if (location && order.status === "SHIPPED") {
+      // Customer এর address geocode করো
+      const customerAddress = [
+        order.customerAddress,
+        order.customerCity,
+      ].filter(Boolean).join(", ");
+ 
+      const customerCoords = await geocodeAddress(customerAddress);
+ 
+      if (customerCoords) {
+        const distanceKm = haversineDistance(
+          parseFloat(location.lat),
+          parseFloat(location.lng),
+          customerCoords.lat,
+          customerCoords.lng
+        );
+ 
+        // Dhaka traffic average speed: 20 km/h
+        const avgSpeedKmh  = 20;
+        const timeHours    = distanceKm / avgSpeedKmh;
+        const timeMinutes  = Math.round(timeHours * 60);
+ 
+        eta = {
+          distanceKm:   Math.round(distanceKm * 10) / 10, // 1 decimal
+          minutes:      timeMinutes,
+          customerLat:  customerCoords.lat,
+          customerLng:  customerCoords.lng,
+          // Human readable
+          label: timeMinutes < 1
+            ? "প্রায় এসে গেছে!"
+            : timeMinutes < 60
+              ? `প্রায় ${timeMinutes} মিনিট`
+              : `প্রায় ${Math.floor(timeMinutes / 60)} ঘণ্টা ${timeMinutes % 60} মিনিট`,
+        };
+      }
     }
  
     return res.status(200).json({
@@ -2650,13 +2715,11 @@ export const trackOrder = async (req, res) => {
         customerName:  order.customerName,
         customerPhone: order.customerPhone,
         orderItems:    order.orderItems,
-        deliveryMan: order.User_Order_deliveryManIdToUser
-          ? {
-              name:  order.User_Order_deliveryManIdToUser.name,
-              phone: order.User_Order_deliveryManIdToUser.phone,
-            }
+        deliveryMan:   order.User_Order_deliveryManIdToUser
+          ? { name: order.User_Order_deliveryManIdToUser.name, phone: order.User_Order_deliveryManIdToUser.phone }
           : null,
-        location, // { lat, lng, updatedAt } অথবা null
+        location,
+        eta, // ✅ { distanceKm, minutes, label, customerLat, customerLng }
       },
     });
   } catch (err) {
@@ -2664,9 +2727,6 @@ export const trackOrder = async (req, res) => {
     return res.status(500).json({ success: false, message: err.message || "Internal Server Error", data: null });
   }
 };
-
-
-
 
 // ✅ Latest Order Fetch Controller
 export const getLatestOrder = async (req, res) => {
