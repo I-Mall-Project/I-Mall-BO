@@ -2736,6 +2736,7 @@ export const updateDeliveryLocation = async (req, res) => {
 // };
 
 // Nominatim দিয়ে address → coordinates
+// Nominatim দিয়ে address → coordinates
 const geocodeAddress = async (order) => {
   const attempts = [
     [order.customerAddress, order.customerCity].filter(Boolean).join(', '),
@@ -2758,10 +2759,15 @@ const geocodeAddress = async (order) => {
 // ✅ OpenRouteService — actual road distance + duration
 const getRouteETA = async (fromLat, fromLng, toLat, toLng) => {
   try {
-    const res = await fetch(
-      `https://api.openrouteservice.org/v2/directions/driving-car?api_key=${process.env.ORS_API_KEY}&start=${fromLng},${fromLat}&end=${toLng},${toLat}`
-    );
+    const key ="eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjRiNWRlMGU0Y2UxYjRjMzliNDNjNmM3ZmRjYmNkOTE2IiwiaCI6Im11cm11cjY0In0=";
+    console.log("ORS KEY exists:", !!key);
+
+    const url = `https://api.openrouteservice.org/v2/directions/driving-car?api_key=${key}&start=${fromLng},${fromLat}&end=${toLng},${toLat}`;
+    const res  = await fetch(url);
     const data = await res.json();
+
+    console.log("ORS response:", JSON.stringify(data?.features?.[0]?.properties?.summary));
+
     const summary = data?.features?.[0]?.properties?.summary;
     if (!summary) return null;
 
@@ -2779,7 +2785,8 @@ const getRouteETA = async (fromLat, fromLng, toLat, toLng) => {
             ? `প্রায় ${durationMin} মিনিট`
             : `প্রায় ${Math.floor(durationMin / 60)} ঘণ্টা ${durationMin % 60} মিনিট`,
     };
-  } catch {
+  } catch (err) {
+    console.error("ORS Error:", err.message);
     return null;
   }
 };
@@ -2867,7 +2874,6 @@ export const trackOrder = async (req, res) => {
     return res.status(500).json({ success: false, message: err.message || "Internal Server Error", data: null });
   }
 };
-
 
 
 
