@@ -2737,20 +2737,38 @@ export const updateDeliveryLocation = async (req, res) => {
 
 // Nominatim দিয়ে address → coordinates
 // Nominatim দিয়ে address → coordinates
+
+
+// Nominatim দিয়ে address → coordinates — structured query
 const geocodeAddress = async (order) => {
+  const city    = order.customerCity || "Dhaka";
+  const address = order.customerAddress || "";
+
+  // Address থেকে area/locality বের করার চেষ্টা
+  // যেমন: "85/1E, Thomas Tower, Kakrail-Dhaka-1000" → "Kakrail"
+  const areaMatch = address.match(/([A-Za-z\u0980-\u09FF]+(?:\s+[A-Za-z\u0980-\u09FF]+)?)\s*[-,]\s*Dhaka/i);
+  const area = areaMatch ? areaMatch[1].trim() : null;
+
   const attempts = [
-    [order.customerAddress, order.customerCity].filter(Boolean).join(', '),
-    order.customerCity,
+    // ১. area + city (সবচেয়ে accurate)
+    area ? `${area}, ${city}, Bangladesh` : null,
+    // ২. postal code থাকলে সেটা দিয়ে
+    order.customerPostalCode ? `${city} ${order.customerPostalCode}, Bangladesh` : null,
+    // ৩. শুধু city
+    `${city}, Bangladesh`,
   ].filter(Boolean);
 
   for (const query of attempts) {
     try {
       const r = await fetch(
-        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query + ', Bangladesh')}&format=json&limit=1&countrycodes=bd`,
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=bd`,
         { headers: { "User-Agent": "iMall-Delivery/1.0" } }
       );
       const d = await r.json();
-      if (d?.[0]) return { lat: parseFloat(d[0].lat), lng: parseFloat(d[0].lon) };
+      if (d?.[0]) {
+        console.log(`Geocoded "${query}" → ${d[0].lat}, ${d[0].lon} (${d[0].display_name})`);
+        return { lat: parseFloat(d[0].lat), lng: parseFloat(d[0].lon) };
+      }
     } catch {}
   }
   return null;
@@ -2759,7 +2777,7 @@ const geocodeAddress = async (order) => {
 // ✅ OpenRouteService — actual road distance + duration
 const getRouteETA = async (fromLat, fromLng, toLat, toLng) => {
   try {
-    const key ="eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjRiNWRlMGU0Y2UxYjRjMzliNDNjNmM3ZmRjYmNkOTE2IiwiaCI6Im11cm11cjY0In0=";
+    const key = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjRiNWRlMGU0Y2UxYjRjMzliNDNjNmM3ZmRjYmNkOTE2IiwiaCI6Im11cm11cjY0In0=";
     console.log("ORS KEY exists:", !!key);
 
     const url = `https://api.openrouteservice.org/v2/directions/driving-car?api_key=${key}&start=${fromLng},${fromLat}&end=${toLng},${toLat}`;
@@ -2874,7 +2892,6 @@ export const trackOrder = async (req, res) => {
     return res.status(500).json({ success: false, message: err.message || "Internal Server Error", data: null });
   }
 };
-
 
 
 
