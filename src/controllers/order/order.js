@@ -2601,39 +2601,187 @@ export const updateDeliveryLocation = async (req, res) => {
 // ============================================================
 // Haversine formula — দুই GPS point এর মধ্যে দূরত্ব (km)
 // Haversine formula — দুই GPS point এর মধ্যে দূরত্ব (km)
-const haversineDistance = (lat1, lng1, lat2, lng2) => {
-  const R    = 6371;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLng = (lng2 - lng1) * Math.PI / 180;
-  const a    =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-    Math.sin(dLng / 2) * Math.sin(dLng / 2);
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-};
+// const haversineDistance = (lat1, lng1, lat2, lng2) => {
+//   const R    = 6371;
+//   const dLat = (lat2 - lat1) * Math.PI / 180;
+//   const dLng = (lng2 - lng1) * Math.PI / 180;
+//   const a    =
+//     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+//     Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+//     Math.sin(dLng / 2) * Math.sin(dLng / 2);
+//   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+// };
 
-// Nominatim দিয়ে address → coordinates — multiple fallback
+// // Nominatim দিয়ে address → coordinates — multiple fallback
+// const geocodeAddress = async (order) => {
+//   const attempts = [
+//     // ১. শুধু city
+//     order.customerCity,
+//     // ২. address এর শেষ ২ part + city
+//     order.customerAddress
+//       ? [order.customerAddress.split(',').slice(-2).join(',').trim(), order.customerCity].filter(Boolean).join(', ')
+//       : null,
+//     // ৩. full address
+//     [order.customerAddress, order.customerCity].filter(Boolean).join(', '),
+//   ].filter(Boolean);
+
+//   for (const query of attempts) {
+//     try {
+//       const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query + ', Bangladesh')}&format=json&limit=1&countrycodes=bd`;
+//       const response = await fetch(url, { headers: { "User-Agent": "iMall-Delivery/1.0" } });
+//       const data = await response.json();
+//       if (data?.[0]) return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+//     } catch {}
+//   }
+//   return null;
+// };
+
+// export const trackOrder = async (req, res) => {
+//   try {
+//     const { phone } = req.query;
+
+//     if (!phone) {
+//       return res.status(400).json({ success: false, message: "Phone number required", data: null });
+//     }
+
+//     const order = await prisma.order.findFirst({
+//       where: { customerPhone: phone, isDeleted: false },
+//       orderBy: { createdAt: "desc" },
+//       include: {
+//         orderItems: true,
+//         User_Order_deliveryManIdToUser: {
+//           select: { id: true, name: true, phone: true },
+//         },
+//       },
+//     });
+
+//     if (!order) {
+//       return res.status(404).json({ success: false, message: "এই নম্বরে কোনো অর্ডার পাওয়া যায়নি", data: null });
+//     }
+
+//     // Live location
+//     let location = null;
+//     if (order.deliveryManId && (order.status === "SHIPPED" || order.status === "PENDING")) {
+//       const loc = await prisma.$queryRaw`
+//         SELECT "lat", "lng", "updatedAt"
+//         FROM "DeliveryLocation"
+//         WHERE "orderId" = ${order.id}
+//         LIMIT 1
+//       `;
+//       location = loc?.[0] || null;
+//     }
+
+//     // ✅ ETA calculation — SHIPPED এবং location থাকলে
+//     let eta = null;
+//     if (location && order.status === "SHIPPED") {
+//       // Customer এর address geocode করো
+//       const customerAddress = [
+//         order.customerAddress,
+//         order.customerCity,
+//       ].filter(Boolean).join(", ");
+
+//       const customerCoords = await geocodeAddress(order);
+
+//       if (customerCoords) {
+//         const distanceKm = haversineDistance(
+//           parseFloat(location.lat),
+//           parseFloat(location.lng),
+//           customerCoords.lat,
+//           customerCoords.lng
+//         );
+
+//         // Dhaka traffic average speed: 20 km/h
+//         const avgSpeedKmh  = 20;
+//         const timeHours    = distanceKm / avgSpeedKmh;
+//         const timeMinutes  = Math.round(timeHours * 60);
+
+//         eta = {
+//           distanceKm:   Math.round(distanceKm * 10) / 10, // 1 decimal
+//           minutes:      timeMinutes,
+//           customerLat:  customerCoords.lat,
+//           customerLng:  customerCoords.lng,
+//           // Human readable
+//           label: timeMinutes < 1
+//             ? "প্রায় এসে গেছে!"
+//             : timeMinutes < 60
+//               ? `প্রায় ${timeMinutes} মিনিট`
+//               : `প্রায় ${Math.floor(timeMinutes / 60)} ঘণ্টা ${timeMinutes % 60} মিনিট`,
+//         };
+//       }
+//     }
+
+//     return res.status(200).json({
+//       success: true,
+//       message: "Order fetched successfully",
+//       data: {
+//         invoice:       order.invoiceNumber,
+//         status:        order.status,
+//         createdAt:     order.createdAt,
+//         assignedAt:    order.assignedAt,
+//         deliveredAt:   order.deliveredAt,
+//         customerName:  order.customerName,
+//         customerPhone: order.customerPhone,
+//         orderItems:    order.orderItems,
+//         deliveryMan:   order.User_Order_deliveryManIdToUser
+//           ? { name: order.User_Order_deliveryManIdToUser.name, phone: order.User_Order_deliveryManIdToUser.phone }
+//           : null,
+//         location,
+//         eta, // ✅ { distanceKm, minutes, label, customerLat, customerLng }
+//       },
+//     });
+//   } catch (err) {
+//     console.error(err);
+//     return res.status(500).json({ success: false, message: err.message || "Internal Server Error", data: null });
+//   }
+// };
+
+// Nominatim দিয়ে address → coordinates
 const geocodeAddress = async (order) => {
   const attempts = [
-    // ১. শুধু city
-    order.customerCity,
-    // ২. address এর শেষ ২ part + city
-    order.customerAddress
-      ? [order.customerAddress.split(',').slice(-2).join(',').trim(), order.customerCity].filter(Boolean).join(', ')
-      : null,
-    // ৩. full address
     [order.customerAddress, order.customerCity].filter(Boolean).join(', '),
+    order.customerCity,
   ].filter(Boolean);
 
   for (const query of attempts) {
     try {
-      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query + ', Bangladesh')}&format=json&limit=1&countrycodes=bd`;
-      const response = await fetch(url, { headers: { "User-Agent": "iMall-Delivery/1.0" } });
-      const data = await response.json();
-      if (data?.[0]) return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+      const r = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query + ', Bangladesh')}&format=json&limit=1&countrycodes=bd`,
+        { headers: { "User-Agent": "iMall-Delivery/1.0" } }
+      );
+      const d = await r.json();
+      if (d?.[0]) return { lat: parseFloat(d[0].lat), lng: parseFloat(d[0].lon) };
     } catch {}
   }
   return null;
+};
+
+// ✅ OpenRouteService — actual road distance + duration
+const getRouteETA = async (fromLat, fromLng, toLat, toLng) => {
+  try {
+    const res = await fetch(
+      `https://api.openrouteservice.org/v2/directions/driving-car?api_key=${process.env.ORS_API_KEY}&start=${fromLng},${fromLat}&end=${toLng},${toLat}`
+    );
+    const data = await res.json();
+    const summary = data?.features?.[0]?.properties?.summary;
+    if (!summary) return null;
+
+    const distanceKm  = Math.round((summary.distance / 1000) * 10) / 10;
+    const durationMin = Math.round(summary.duration / 60);
+
+    return {
+      distanceKm,
+      minutes: durationMin,
+      label: distanceKm < 0.3
+        ? "প্রায় এসে গেছে! 🎉"
+        : durationMin < 1
+          ? "প্রায় এসে গেছে!"
+          : durationMin < 60
+            ? `প্রায় ${durationMin} মিনিট`
+            : `প্রায় ${Math.floor(durationMin / 60)} ঘণ্টা ${durationMin % 60} মিনিট`,
+    };
+  } catch {
+    return null;
+  }
 };
 
 export const trackOrder = async (req, res) => {
@@ -2671,42 +2819,27 @@ export const trackOrder = async (req, res) => {
       location = loc?.[0] || null;
     }
 
-    // ✅ ETA calculation — SHIPPED এবং location থাকলে
+    // ✅ ETA — ORS দিয়ে actual road distance
     let eta = null;
     if (location && order.status === "SHIPPED") {
-      // Customer এর address geocode করো
-      const customerAddress = [
-        order.customerAddress,
-        order.customerCity,
-      ].filter(Boolean).join(", ");
-
       const customerCoords = await geocodeAddress(order);
 
       if (customerCoords) {
-        const distanceKm = haversineDistance(
+        // ✅ ORS দিয়ে route calculate
+        const route = await getRouteETA(
           parseFloat(location.lat),
           parseFloat(location.lng),
           customerCoords.lat,
           customerCoords.lng
         );
 
-        // Dhaka traffic average speed: 20 km/h
-        const avgSpeedKmh  = 20;
-        const timeHours    = distanceKm / avgSpeedKmh;
-        const timeMinutes  = Math.round(timeHours * 60);
-
-        eta = {
-          distanceKm:   Math.round(distanceKm * 10) / 10, // 1 decimal
-          minutes:      timeMinutes,
-          customerLat:  customerCoords.lat,
-          customerLng:  customerCoords.lng,
-          // Human readable
-          label: timeMinutes < 1
-            ? "প্রায় এসে গেছে!"
-            : timeMinutes < 60
-              ? `প্রায় ${timeMinutes} মিনিট`
-              : `প্রায় ${Math.floor(timeMinutes / 60)} ঘণ্টা ${timeMinutes % 60} মিনিট`,
-        };
+        if (route) {
+          eta = {
+            ...route,
+            customerLat: customerCoords.lat,
+            customerLng: customerCoords.lng,
+          };
+        }
       }
     }
 
@@ -2726,7 +2859,7 @@ export const trackOrder = async (req, res) => {
           ? { name: order.User_Order_deliveryManIdToUser.name, phone: order.User_Order_deliveryManIdToUser.phone }
           : null,
         location,
-        eta, // ✅ { distanceKm, minutes, label, customerLat, customerLng }
+        eta, // { distanceKm, minutes, label, customerLat, customerLng }
       },
     });
   } catch (err) {
@@ -2734,6 +2867,19 @@ export const trackOrder = async (req, res) => {
     return res.status(500).json({ success: false, message: err.message || "Internal Server Error", data: null });
   }
 };
+
+
+
+
+
+
+
+
+
+
+
+
+
 // ✅ Latest Order Fetch Controller
 export const getLatestOrder = async (req, res) => {
   try {
