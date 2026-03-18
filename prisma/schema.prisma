@@ -303,10 +303,10 @@ model ProductImage {
 }
 
 model Order {
-  id                             String       @id @default(uuid())
+  id                             String            @id @default(uuid())
   userId                         String?
   couponId                       String?
-  invoiceNumber                  String?      @default(nanoid(6))
+  invoiceNumber                  String?           @default(nanoid(6))
   customerName                   String?
   customerPhone                  String?
   customerAddress                String?
@@ -317,23 +317,26 @@ model Order {
   totalItems                     Float
   subtotalCost                   Float
   subtotal                       Float
-  paymentMethod                  String?      @default("COD")
-  status                         OrderStatus? @default(PENDING)
+  paymentMethod                  String?           @default("COD")
+  status                         OrderStatus?      @default(PENDING)
   otp                            String?
   deliveryChargeInside           Float?
   deliveryChargeOutside          Float?
-  isDeleted                      Boolean      @default(false)
+  isDeleted                      Boolean           @default(false)
   createdBy                      String?
   updatedBy                      String?
-  createdAt                      DateTime     @default(now())
-  updatedAt                      DateTime     @updatedAt
-  platformCharge                 Decimal      @default(0) @db.Decimal(10, 2)
+  createdAt                      DateTime          @default(now())
+  updatedAt                      DateTime          @updatedAt
+  platformCharge                 Decimal           @default(0) @db.Decimal(10, 2)
   deliveryManId                  String?
-  assignedAt                     DateTime?    @db.Timestamp(6)
-  deliveredAt                    DateTime?    @db.Timestamp(6)
-  coupon                         Coupon?      @relation(fields: [couponId], references: [id], onDelete: Cascade)
-  user                           User?        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  User_Order_deliveryManIdToUser User?        @relation("Order_deliveryManIdToUser", fields: [deliveryManId], references: [id], onUpdate: NoAction, map: "fk_deliveryMan")
+  assignedAt                     DateTime?         @db.Timestamp(6)
+  deliveredAt                    DateTime?         @db.Timestamp(6)
+  customerLat                    Float?
+  customerLng                    Float?
+  DeliveryLocation               DeliveryLocation?
+  coupon                         Coupon?           @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  user                           User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  User_Order_deliveryManIdToUser User?             @relation("Order_deliveryManIdToUser", fields: [deliveryManId], references: [id], onUpdate: NoAction, map: "fk_deliveryMan")
   orderItems                     OrderItem[]
 }
 
@@ -433,6 +436,16 @@ model Contact {
   fullAddress    String?
   connectionType String?
   packageChoice  String?
+}
+
+model DeliveryLocation {
+  id            String   @id @default(dbgenerated("(gen_random_uuid())::text"))
+  orderId       String   @unique
+  deliveryManId String
+  lat           Float
+  lng           Float
+  updatedAt     DateTime @default(now()) @db.Timestamp(6)
+  Order         Order    @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 }
 
 enum OrderStatus {

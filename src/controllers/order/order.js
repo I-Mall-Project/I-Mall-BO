@@ -2740,21 +2740,14 @@ export const updateDeliveryLocation = async (req, res) => {
 
 
 // Nominatim দিয়ে address → coordinates — structured query
+// Customer যা দিয়েছে সেটাই সরাসরি search করো
 const geocodeAddress = async (order) => {
   const city    = order.customerCity || "Dhaka";
   const address = order.customerAddress || "";
 
-  // Address থেকে area/locality বের করার চেষ্টা
-  // যেমন: "85/1E, Thomas Tower, Kakrail-Dhaka-1000" → "Kakrail"
-  const areaMatch = address.match(/([A-Za-z\u0980-\u09FF]+(?:\s+[A-Za-z\u0980-\u09FF]+)?)\s*[-,]\s*Dhaka/i);
-  const area = areaMatch ? areaMatch[1].trim() : null;
-
   const attempts = [
-    // ১. area + city (সবচেয়ে accurate)
-    area ? `${area}, ${city}, Bangladesh` : null,
-    // ২. postal code থাকলে সেটা দিয়ে
-    order.customerPostalCode ? `${city} ${order.customerPostalCode}, Bangladesh` : null,
-    // ৩. শুধু city
+    address ? `${address}, ${city}, Bangladesh` : null,
+    address ? `${address}, Bangladesh` : null,
     `${city}, Bangladesh`,
   ].filter(Boolean);
 
@@ -2765,10 +2758,7 @@ const geocodeAddress = async (order) => {
         { headers: { "User-Agent": "iMall-Delivery/1.0" } }
       );
       const d = await r.json();
-      if (d?.[0]) {
-        console.log(`Geocoded "${query}" → ${d[0].lat}, ${d[0].lon} (${d[0].display_name})`);
-        return { lat: parseFloat(d[0].lat), lng: parseFloat(d[0].lon) };
-      }
+      if (d?.[0]) return { lat: parseFloat(d[0].lat), lng: parseFloat(d[0].lon) };
     } catch {}
   }
   return null;
@@ -2844,13 +2834,18 @@ export const trackOrder = async (req, res) => {
       location = loc?.[0] || null;
     }
 
-    // ✅ ETA — ORS দিয়ে actual road distance
+    // ✅ ETA — customer lat/lng থাকলে directly use করো, না থাকলে geocode
     let eta = null;
     if (location && order.status === "SHIPPED") {
-      const customerCoords = await geocodeAddress(order);
+      // ✅ Customer pin drop করলে সেটাই use করো — সবচেয়ে accurate
+      let customerCoords = null;
+      if (order.customerLat && order.customerLng) {
+        customerCoords = { lat: parseFloat(order.customerLat), lng: parseFloat(order.customerLng) };
+      } else {
+        customerCoords = await geocodeAddress(order);
+      }
 
       if (customerCoords) {
-        // ✅ ORS দিয়ে route calculate
         const route = await getRouteETA(
           parseFloat(location.lat),
           parseFloat(location.lng),
@@ -2892,7 +2887,6 @@ export const trackOrder = async (req, res) => {
     return res.status(500).json({ success: false, message: err.message || "Internal Server Error", data: null });
   }
 };
-
 
 
 
