@@ -50,7 +50,7 @@ model RoleModule {
 }
 
 model User {
-  id                              String     @id @default(uuid())
+  id                              String       @id @default(uuid())
   roleId                          String?
   parentId                        String?
   name                            String
@@ -61,39 +61,40 @@ model User {
   country                         String?
   city                            String?
   postalCode                      String?
-  image                           String?    @default("images/user/user.png")
+  image                           String?      @default("images/user/user.png")
   password                        String?
   otp                             Int?
-  otpCount                        Int?       @default(0)
-  initialPaymentAmount            Float?     @default(0)
-  initialPaymentDue               Float?     @default(0)
-  installmentTime                 Float?     @default(0)
+  otpCount                        Int?         @default(0)
+  initialPaymentAmount            Float?       @default(0)
+  initialPaymentDue               Float?       @default(0)
+  installmentTime                 Float?       @default(0)
   refreshToken                    String?
-  isActive                        Boolean    @default(true)
-  isDeleted                       Boolean    @default(false)
+  isActive                        Boolean      @default(true)
+  isDeleted                       Boolean      @default(false)
   createdBy                       String?
   updatedBy                       String?
   deletedBy                       String?
-  createdAt                       DateTime   @default(now())
-  updatedAt                       DateTime   @updatedAt
+  createdAt                       DateTime     @default(now())
+  updatedAt                       DateTime     @updatedAt
   presentAddress                  String?
   permanentAddress                String?
-  nidNo                           String?    @db.VarChar(50)
-  nidAttachment                   String[]   @default([])
+  nidNo                           String?      @db.VarChar(50)
+  nidAttachment                   String[]     @default([])
   passportPhoto                   String?
   campaigns                       Campaign[]
   categories                      Category[]
   order                           Order[]
-  Order_Order_deliveryManIdToUser Order[]    @relation("Order_deliveryManIdToUser")
+  Order_Order_deliveryManIdToUser Order[]      @relation("Order_deliveryManIdToUser")
   payments                        Payment[]
   preorder                        Preorder[]
   products                        Product[]
   review                          Review[]
   suppliers                       Supplier[]
-  parent                          User?      @relation("ParentIdUserId", fields: [parentId], references: [id])
-  children                        User[]     @relation("ParentIdUserId")
-  role                            Role?      @relation(fields: [roleId], references: [id])
+  parent                          User?        @relation("ParentIdUserId", fields: [parentId], references: [id])
+  children                        User[]       @relation("ParentIdUserId")
+  role                            Role?        @relation(fields: [roleId], references: [id])
   wishlist                        Wishlist[]
+  brandOwners                     BrandOwner[] // ✅ NEW
 }
 
 model Banner {
@@ -196,17 +197,18 @@ model Campaign {
 }
 
 model Brand {
-  id           String     @id @default(uuid())
-  name         String     @unique
+  id           String       @id @default(uuid())
+  name         String       @unique
   image        String?
   slug         String
-  isActive     Boolean    @default(true)
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
-  brandID      String?    @db.VarChar(100)
+  isActive     Boolean      @default(true)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  brandID      String?      @db.VarChar(100)
   brandAddress String?
   category     Category[]
   product      Product[]
+  owners       BrandOwner[]
 }
 
 model Supplier {
@@ -446,6 +448,17 @@ model DeliveryLocation {
   lng           Float
   updatedAt     DateTime @default(now()) @db.Timestamp(6)
   Order         Order    @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model BrandOwner {
+  id        String    @id @default(dbgenerated("(gen_random_uuid())::text"))
+  brandId   String
+  userId    String
+  createdAt DateTime? @default(now()) @db.Timestamp(6)
+  Brand     Brand     @relation(fields: [brandId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  User      User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([brandId, userId])
 }
 
 enum OrderStatus {

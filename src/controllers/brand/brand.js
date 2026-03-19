@@ -9,6 +9,9 @@ import validateInput from "../../utils/validateInput.js";
 
 const module_name = "brand";
 
+const BRAND_OWNER_ROLE_ID = "9778c688-b656-45f9-9f37-542c77ea4665";
+
+
 //create brand
 // export const createBrand = async (req, res) => {
 //   try {
@@ -1114,5 +1117,258 @@ export const getBrandForCustomer = async (req, res) => {
   } catch (error) {
     console.log(error);
     return res.status(500).json(jsonResponse(false, error, null));
+  }
+};
+
+
+
+
+// ✅ Helper — brand owner এর brands গুলো পাও
+const getOwnerBrandIds = async (userId) => {
+  const owned = await prisma.brandOwner.findMany({
+    where: { userId },
+    select: { brandId: true },
+  });
+  return owned.map(o => o.brandId);
+};
+ 
+// ═══════════════════════════════════════
+// BRAND OWNER MANAGEMENT (Admin করবে)
+// ═══════════════════════════════════════
+ 
+// Admin — একজন user কে brand owner বানাও
+export const assignBrandOwner = async (req, res) => {
+  try {
+    const { userId, brandId } = req.body;
+    if (!userId || !brandId)
+      return res.status(400).json(jsonResponse(false, "userId and brandId required", null));
+ 
+    // User কে brand-owner role দাও
+    await prisma.user.update({
+      where: { id: userId },
+      data: { roleId: BRAND_OWNER_ROLE_ID },
+    });
+ 
+    // BrandOwner table এ add করো
+    const existing = await prisma.brandOwner.findFirst({ where: { userId, brandId } });
+    if (!existing) {
+      await prisma.brandOwner.create({ data: { userId, brandId } });
+    }
+ 
+    return res.status(200).json(jsonResponse(true, "Brand owner assigned successfully", null));
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json(jsonResponse(false, error.message, null));
+  }
+};
+ 
+// Admin — brand owner remove করো
+export const removeBrandOwner = async (req, res) => {
+  try {
+    const { userId, brandId } = req.body;
+    await prisma.brandOwner.deleteMany({ where: { userId, brandId } });
+ 
+    // আর কোনো brand নেই তাহলে role remove
+    const remaining = await prisma.brandOwner.count({ where: { userId } });
+    if (remaining === 0) {
+      // Default customer role এ ফিরিয়ে দাও (admin role id তোমার system এ যা আছে)
+      // এখানে super-admin এর parent role id দাও অথবা skip করো
+    }
+ 
+    return res.status(200).json(jsonResponse(true, "Brand owner removed", null));
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json(jsonResponse(false, error.message, null));
+  }
+};
+ 
+// Admin — কোন brand এর কোন owners আছে দেখো
+export const getBrandOwners = async (req, res) => {
+  try {
+    const { brandId } = req.params;
+    const owners = await prisma.brandOwner.findMany({
+      where: { brandId },
+      include: { user: { select: { id: true, name: true, email: true, phone: true } } },
+    });
+    return res.status(200).json(jsonResponse(true, `${owners.length} owners found`, owners));
+  } catch (error) {
+    return res.status(500).json(jsonResponse(false, error.message, null));
+  }
+};
+ 
+// ═══════════════════════════════════════
+// BRAND OWNER — নিজের BRANDS
+// ═══════════════════════════════════════
+ 
+export const getMyBrands = async (req, res) => {
+  try {
+    const brandIds = await getOwnerBrandIds(req.user.id);
+    if (brandIds.length === 0)
+      return res.status(200).json(jsonResponse(true, "No brands assigned", []));
+ 
+    const brands = await prisma.brand.findMany({
+      where: { id: { in: brandIds } },
+      orderBy: { createdAt: "desc" },
+    });
+    return res.status(200).json(jsonResponse(true, `${brands.length} brands found`, brands));
+  } catch (error) {
+    return res.status(500).json(jsonResponse(false, error.message, null));
+  }
+};
+ 
+// ═══════════════════════════════════════
+// BRAND OWNER — ORDERS (নিজের brand এর)
+// ═══════════════════════════════════════
+ 
+export const getMyBrandOrders = async (req, res) => {
+  try {
+    const brandIds = await getOwnerBrandIds(req.user.id);
+    if (brandIds.length === 0)
+      return res.status(200).json(jsonResponse(true, "No orders found", []));
+ 
+    const { brandId, status, from, to, page = 1, limit = 20 } = req.query;
+ 
+    const where = {
+      isDeleted: false,
+      orderItems: {
+        some: {
+          brandId: brandId ? brandId : { in: brandIds },
+        },
+      },
+      ...(status && { status }),
+      ...(from && to && {
+        createdAt: { gte: new Date(from), lte: new Date(to) },
+      }),
+    };
+ 
+    const [orders, total] = await Promise.all([
+      prisma.order.findMany({
+        where,
+        include: {
+          orderItems: {
+            where: { brandId: brandId ? brandId : { in: brandIds } },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+        skip: (parseInt(page) - 1) * parseInt(limit),
+        take: parseInt(limit),
+      }),
+      prisma.order.count({ where }),
+    ]);
+ 
+    return res.status(200).json(jsonResponse(true, `${orders.length} orders found`, { orders, total, page: parseInt(page) }));
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json(jsonResponse(false, error.message, null));
+  }
+};
+ 
+// ═══════════════════════════════════════
+// BRAND OWNER — ANALYTICS
+// ═══════════════════════════════════════
+ 
+export const getMyBrandAnalytics = async (req, res) => {
+  try {
+    const brandIds = await getOwnerBrandIds(req.user.id);
+    if (brandIds.length === 0)
+      return res.status(200).json(jsonResponse(true, "No data", null));
+ 
+    const { brandId, range = "monthly" } = req.query;
+    const targetBrandIds = brandId ? [brandId] : brandIds;
+ 
+    const now = new Date();
+    let fromDate;
+    if (range === "daily")   fromDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    if (range === "weekly")  fromDate = new Date(now.getTime() - 7  * 24 * 60 * 60 * 1000);
+    if (range === "monthly") fromDate = new Date(now.getFullYear(), now.getMonth(), 1);
+    if (range === "yearly")  fromDate = new Date(now.getFullYear(), 0, 1);
+ 
+    // নিজের brand এর order items
+    const orderItems = await prisma.orderItem.findMany({
+      where: {
+        brandId: { in: targetBrandIds },
+        order: {
+          isDeleted: false,
+          status: { in: ["DELIVERED"] },
+          createdAt: { gte: fromDate },
+        },
+      },
+      include: { order: { select: { createdAt: true, status: true } } },
+    });
+ 
+    // Total revenue & profit
+    const totalRevenue = orderItems.reduce((sum, item) => sum + Number(item.totalPrice ?? 0), 0);
+    const totalCost    = orderItems.reduce((sum, item) => sum + Number(item.totalCostPrice ?? 0), 0);
+    const totalProfit  = totalRevenue - totalCost;
+    const totalOrders  = new Set(orderItems.map(i => i.orderId)).size;
+    const totalItems   = orderItems.reduce((sum, item) => sum + item.quantity, 0);
+ 
+    // Product wise analytics
+    const productMap = {};
+    for (const item of orderItems) {
+      const key = item.name;
+      if (!productMap[key]) {
+        productMap[key] = { name: key, revenue: 0, cost: 0, profit: 0, qty: 0, orders: new Set() };
+      }
+      productMap[key].revenue += Number(item.totalPrice ?? 0);
+      productMap[key].cost    += Number(item.totalCostPrice ?? 0);
+      productMap[key].profit  += Number(item.totalPrice ?? 0) - Number(item.totalCostPrice ?? 0);
+      productMap[key].qty     += item.quantity;
+      productMap[key].orders.add(item.orderId);
+    }
+    const productAnalytics = Object.values(productMap)
+      .map(p => ({ ...p, orders: p.orders.size }))
+      .sort((a, b) => b.revenue - a.revenue);
+ 
+    // Daily breakdown (last 30 days for chart)
+    const dailyMap = {};
+    for (const item of orderItems) {
+      const day = item.order.createdAt.toISOString().split("T")[0];
+      if (!dailyMap[day]) dailyMap[day] = { date: day, revenue: 0, profit: 0, orders: new Set() };
+      dailyMap[day].revenue += Number(item.totalPrice ?? 0);
+      dailyMap[day].profit  += Number(item.totalPrice ?? 0) - Number(item.totalCostPrice ?? 0);
+      dailyMap[day].orders.add(item.orderId);
+    }
+    const dailyBreakdown = Object.values(dailyMap)
+      .map(d => ({ ...d, orders: d.orders.size }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+ 
+    return res.status(200).json(jsonResponse(true, "Analytics fetched", {
+      summary: { totalRevenue, totalCost, totalProfit, totalOrders, totalItems, range },
+      productAnalytics,
+      dailyBreakdown,
+    }));
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json(jsonResponse(false, error.message, null));
+  }
+};
+ 
+// ═══════════════════════════════════════
+// BRAND OWNER — PRODUCTS (নিজের brand এর)
+// ═══════════════════════════════════════
+ 
+export const getMyBrandProducts = async (req, res) => {
+  try {
+    const brandIds = await getOwnerBrandIds(req.user.id);
+    if (brandIds.length === 0)
+      return res.status(200).json(jsonResponse(true, "No products found", []));
+ 
+    const { brandId } = req.query;
+    const products = await prisma.product.findMany({
+      where: {
+        brandId: brandId ? brandId : { in: brandIds },
+        isDeleted: false,
+      },
+      include: {
+        brand: { select: { name: true } },
+        images: true,
+        productAttributes: { where: { isDeleted: false } },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    return res.status(200).json(jsonResponse(true, `${products.length} products found`, products));
+  } catch (error) {
+    return res.status(500).json(jsonResponse(false, error.message, null));
   }
 };
