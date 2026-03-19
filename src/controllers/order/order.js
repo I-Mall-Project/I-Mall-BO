@@ -1149,7 +1149,9 @@ export const createOrder = async (req, res) => {
 </body>
 </html>`;
 
-    await sendEmail(customerEmail, `Order Placed from I-Mall — Invoice #${invoiceNumber}`, emailBody);
+    if (customerEmail) {
+      await sendEmail(customerEmail, `Order Placed from I-Mall — Invoice #${invoiceNumber}`, emailBody);
+    }
     await sendEmail("shamimrocky801@yahoo.com", `New Order Received — Invoice #${invoiceNumber}`, emailBody);
 
     return res.status(200).json(jsonResponse(true, "Your order has been placed successfully", newOrder));
@@ -1159,7 +1161,6 @@ export const createOrder = async (req, res) => {
     return res.status(500).json(jsonResponse(false, error.message || error, null));
   }
 };
-
 
 // export const createOrderSsl = async (req, res) => {
 //   try {
