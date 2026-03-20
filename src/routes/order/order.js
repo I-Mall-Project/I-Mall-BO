@@ -18,7 +18,8 @@ import {
   getMonthlyOrderCountYearWise,
   assignDeliveryManToOrder,
   getOrdersForDeliveryMan,
-  updateOrderStatusByDeliveryMan
+  updateOrderStatusByDeliveryMan,
+  getRevenueAnalysis 
 } from "../../controllers/order/order.js";
 import verify from "../../utils/verifyToken.js";
 
@@ -52,6 +53,9 @@ router.post("/v1/delivery/location", verify, updateDeliveryLocation);
 router.get("/track", trackOrder);
 router.get("/v1/payment/track", paymentCallback);
 router.get("/fraud-check-order", fraudCheckByOrderPhone);
+
+router.get("/v1/analysis/revenue", verify, getRevenueAnalysis);
+
 
 
 export default router;
