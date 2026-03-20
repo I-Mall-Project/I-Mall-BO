@@ -2863,16 +2863,17 @@ export const getOrdersForDeliveryMan = async (req, res) => {
 // 3️⃣ Delivery man updates order status
 
 
+
 const PLATFORM_CHARGE = 10; // Fixed
 const DELIVERY_CHARGE = 30; // Fixed
- 
+
 export const getRevenueAnalysis = async (req, res) => {
   try {
     const { range = "monthly", from, to } = req.query;
- 
+
     const now = new Date();
     let fromDate, toDate = to ? new Date(to) : now;
- 
+
     if (from) {
       fromDate = new Date(from);
     } else {
@@ -2881,12 +2882,12 @@ export const getRevenueAnalysis = async (req, res) => {
       if (range === "monthly") fromDate = new Date(now.getFullYear(), now.getMonth(), 1);
       if (range === "yearly")  fromDate = new Date(now.getFullYear(), 0, 1);
     }
- 
+
     // Previous period for comparison
     const periodMs = toDate.getTime() - fromDate.getTime();
     const prevFrom = new Date(fromDate.getTime() - periodMs);
     const prevTo   = new Date(fromDate.getTime() - 1);
- 
+
     // ── Fetch orders ─────────────────────────────
     const [orders, prevOrders, allTimeOrders] = await Promise.all([
       prisma.order.findMany({
@@ -2904,31 +2905,36 @@ export const getRevenueAnalysis = async (req, res) => {
         orderBy: { createdAt: "asc" },
       }),
     ]);
- 
+
     const delivered = orders.filter(o => o.status === "DELIVERED");
     const canceled  = orders.filter(o => o.status === "CANCELED" || o.status === "CANCELLED");
     const returned  = orders.filter(o => o.status === "RETURNED");
     const pending   = orders.filter(o => o.status === "PENDING");
     const shipped   = orders.filter(o => o.status === "SHIPPED");
- 
+
     // ── Summary ──────────────────────────────────
     const totalRevenue        = delivered.reduce((s, o) => s + Number(o.subtotal ?? 0), 0);
+    const totalCost           = delivered.reduce((s, o) => s + (o.orderItems?.reduce((ss, i) => ss + Number(i.totalCostPrice ?? 0), 0) || 0), 0);
     const totalPlatformCharge = delivered.length * PLATFORM_CHARGE;
     const totalDeliveryCharge = delivered.length * DELIVERY_CHARGE;
+    const productProfit       = totalRevenue - totalCost;                                    // Product বেচে লাভ
+    const chargeIncome        = totalPlatformCharge + totalDeliveryCharge;                   // Charge থেকে income
+    const totalProfit         = productProfit + chargeIncome;                                // মোট profit
     const avgOrderValue       = delivered.length > 0 ? totalRevenue / delivered.length : 0;
     const totalItems          = delivered.reduce((s, o) => s + (o.orderItems?.reduce((ss, i) => ss + i.quantity, 0) || 0), 0);
- 
+
     // Previous period
     const prevDelivered = prevOrders.filter(o => o.status === "DELIVERED");
     const prevRevenue   = prevDelivered.reduce((s, o) => s + Number(o.subtotal ?? 0), 0);
     const growthRate    = prevRevenue > 0 ? Math.round(((totalRevenue - prevRevenue) / prevRevenue) * 100) : 100;
- 
+
     // ── All-time stats ────────────────────────────
     const allTimeDelivered        = allTimeOrders.filter(o => o.status === "DELIVERED");
     const allTimeRevenue          = allTimeDelivered.reduce((s, o) => s + Number(o.subtotal ?? 0), 0);
     const allTimePlatformCharge   = allTimeDelivered.length * PLATFORM_CHARGE;
     const allTimeDeliveryCharge   = allTimeDelivered.length * DELIVERY_CHARGE;
- 
+    const allTimeChargeIncome     = allTimePlatformCharge + allTimeDeliveryCharge;
+
     // ── Year-wise stats ───────────────────────────
     const yearMap = {};
     for (const o of allTimeOrders) {
@@ -2943,7 +2949,7 @@ export const getRevenueAnalysis = async (req, res) => {
       }
     }
     const yearWise = Object.values(yearMap).sort((a, b) => a.year.localeCompare(b.year));
- 
+
     // ── Daily trend ──────────────────────────────
     const dailyMap = {};
     for (const o of orders) {
@@ -2954,7 +2960,7 @@ export const getRevenueAnalysis = async (req, res) => {
       if (o.status === "CANCELED" || o.status === "CANCELLED") dailyMap[day].canceled++;
     }
     const dailyTrend = Object.values(dailyMap).sort((a, b) => a.date.localeCompare(b.date));
- 
+
     // ── Monthly trend ────────────────────────────
     const monthlyMap = {};
     for (const o of orders) {
@@ -2968,7 +2974,7 @@ export const getRevenueAnalysis = async (req, res) => {
       monthlyMap[month].orders++;
     }
     const monthlyTrend = Object.values(monthlyMap).sort((a, b) => a.month.localeCompare(b.month));
- 
+
     // ── Payment method ────────────────────────────
     const paymentMap = {};
     for (const o of orders) {
@@ -2978,7 +2984,7 @@ export const getRevenueAnalysis = async (req, res) => {
       if (o.status === "DELIVERED") paymentMap[method].revenue += Number(o.subtotal ?? 0);
     }
     const paymentBreakdown = Object.values(paymentMap).sort((a, b) => b.revenue - a.revenue);
- 
+
     // ── Status breakdown ─────────────────────────
     const statusBreakdown = [
       { status: "DELIVERED", count: delivered.length, revenue: totalRevenue },
@@ -2987,7 +2993,7 @@ export const getRevenueAnalysis = async (req, res) => {
       { status: "CANCELED",  count: canceled.length,  revenue: 0 },
       { status: "RETURNED",  count: returned.length,  revenue: 0 },
     ];
- 
+
     // ── Peak hours ───────────────────────────────
     const hourMap = {};
     for (const o of orders) {
@@ -2998,7 +3004,7 @@ export const getRevenueAnalysis = async (req, res) => {
     const peakHours = Array.from({ length: 24 }, (_, h) => ({
       hour: h, count: hourMap[h]?.count || 0, label: `${h.toString().padStart(2, "0")}:00`,
     }));
- 
+
     // ── Peak days ────────────────────────────────
     const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
     const dayMap = {};
@@ -3010,7 +3016,7 @@ export const getRevenueAnalysis = async (req, res) => {
     const peakDays = Array.from({ length: 7 }, (_, d) => ({
       day: d, name: dayNames[d], count: dayMap[d]?.count || 0,
     }));
- 
+
     // ── City wise ────────────────────────────────
     const cityMap = {};
     for (const o of delivered) {
@@ -3020,7 +3026,7 @@ export const getRevenueAnalysis = async (req, res) => {
       cityMap[city].orders++;
     }
     const cityWise = Object.values(cityMap).sort((a, b) => b.revenue - a.revenue).slice(0, 10);
- 
+
     // ── Top customers ─────────────────────────────
     const customerMap = {};
     for (const o of delivered) {
@@ -3032,7 +3038,7 @@ export const getRevenueAnalysis = async (req, res) => {
     const topCustomers    = Object.values(customerMap).sort((a, b) => b.revenue - a.revenue).slice(0, 10);
     const repeatCustomers = Object.values(customerMap).filter(c => c.orders > 1).length;
     const newCustomers    = Object.values(customerMap).filter(c => c.orders === 1).length;
- 
+
     // ── Cancel reasons ────────────────────────────
     const cancelReasonMap = {};
     for (const o of canceled) {
@@ -3041,10 +3047,10 @@ export const getRevenueAnalysis = async (req, res) => {
       cancelReasonMap[reason].count++;
     }
     const cancelReasons = Object.values(cancelReasonMap).sort((a, b) => b.count - a.count);
- 
+
     // ── Return/Refund ─────────────────────────────
     const returnRate = orders.length > 0 ? Math.round((returned.length / orders.length) * 100) : 0;
- 
+
     // ── Coupon usage ─────────────────────────────
     const couponOrders = orders.filter(o => o.couponId);
     const couponMap    = {};
@@ -3056,17 +3062,17 @@ export const getRevenueAnalysis = async (req, res) => {
       if (o.status === "DELIVERED") couponMap[key].revenue += Number(o.subtotal ?? 0);
     }
     const couponStats = Object.values(couponMap).sort((a, b) => b.count - a.count).slice(0, 10);
- 
+
     // ── Delivery time ─────────────────────────────
     const deliveryTimes = delivered
       .filter(o => o.assignedAt && o.deliveredAt)
       .map(o => Math.round((new Date(o.deliveredAt) - new Date(o.assignedAt)) / 60000))
       .filter(m => m > 0 && m < 1440);
- 
+
     const avgDeliveryTime = deliveryTimes.length > 0 ? Math.round(deliveryTimes.reduce((s, m) => s + m, 0) / deliveryTimes.length) : 0;
     const minDeliveryTime = deliveryTimes.length > 0 ? Math.min(...deliveryTimes) : 0;
     const maxDeliveryTime = deliveryTimes.length > 0 ? Math.max(...deliveryTimes) : 0;
- 
+
     // ── Best delivery men ─────────────────────────
     const deliveryManMap = {};
     for (const o of delivered) {
@@ -3080,7 +3086,7 @@ export const getRevenueAnalysis = async (req, res) => {
         if (mins > 0 && mins < 1440) { deliveryManMap[key].totalTime += mins; deliveryManMap[key].timeCount++; }
       }
     }
- 
+
     // Fetch delivery man names
     const deliveryManIds = Object.keys(deliveryManMap);
     if (deliveryManIds.length > 0) {
@@ -3096,7 +3102,7 @@ export const getRevenueAnalysis = async (req, res) => {
       .map(d => ({ ...d, avgTime: d.timeCount > 0 ? Math.round(d.totalTime / d.timeCount) : 0 }))
       .sort((a, b) => b.delivered - a.delivered)
       .slice(0, 10);
- 
+
     // ── Low stock ─────────────────────────────────
     const lowStockProducts = await prisma.productAttribute.findMany({
       where: { stockAmount: { lte: 5 }, isDeleted: false },
@@ -3104,16 +3110,17 @@ export const getRevenueAnalysis = async (req, res) => {
       orderBy: { stockAmount: "asc" },
       take: 20,
     });
- 
+
     return res.status(200).json(jsonResponse(true, "Revenue analysis fetched", {
       summary: {
         totalRevenue, totalOrders: orders.length, avgOrderValue, totalItems,
+        totalCost, productProfit, chargeIncome, totalProfit,
         deliveredCount: delivered.length, canceledCount: canceled.length,
         returnedCount: returned.length, returnRate,
         growthRate, prevRevenue, range, fromDate, toDate,
         totalPlatformCharge, totalDeliveryCharge,
         allTimeRevenue, allTimePlatformCharge, allTimeDeliveryCharge,
-        allTimeOrders: allTimeDelivered.length,
+        allTimeChargeIncome, allTimeOrders: allTimeDelivered.length,
         newCustomers, repeatCustomers,
         avgDeliveryTime, minDeliveryTime, maxDeliveryTime,
       },
@@ -3127,7 +3134,7 @@ export const getRevenueAnalysis = async (req, res) => {
         brandName: p.product?.brand?.name, size: p.size, stock: p.stockAmount,
       })),
     }));
- 
+
   } catch (error) {
     console.log(error);
     return res.status(500).json(jsonResponse(false, error.message, null));
