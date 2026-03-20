@@ -2863,6 +2863,9 @@ export const getOrdersForDeliveryMan = async (req, res) => {
 // 3️⃣ Delivery man updates order status
 
 
+const PLATFORM_CHARGE = 10; // Fixed
+const DELIVERY_CHARGE = 30; // Fixed
+ 
 export const getRevenueAnalysis = async (req, res) => {
   try {
     const { range = "monthly", from, to } = req.query;
@@ -2879,13 +2882,13 @@ export const getRevenueAnalysis = async (req, res) => {
       if (range === "yearly")  fromDate = new Date(now.getFullYear(), 0, 1);
     }
  
-    // Last period for comparison
-    const periodMs   = toDate.getTime() - fromDate.getTime();
-    const prevFrom   = new Date(fromDate.getTime() - periodMs);
-    const prevTo     = new Date(fromDate.getTime() - 1);
+    // Previous period for comparison
+    const periodMs = toDate.getTime() - fromDate.getTime();
+    const prevFrom = new Date(fromDate.getTime() - periodMs);
+    const prevTo   = new Date(fromDate.getTime() - 1);
  
-    // ── Fetch all orders ──────────────────────────
-    const [orders, prevOrders] = await Promise.all([
+    // ── Fetch orders ─────────────────────────────
+    const [orders, prevOrders, allTimeOrders] = await Promise.all([
       prisma.order.findMany({
         where: { isDeleted: false, createdAt: { gte: fromDate, lte: toDate } },
         include: { orderItems: true },
@@ -2895,25 +2898,51 @@ export const getRevenueAnalysis = async (req, res) => {
         where: { isDeleted: false, createdAt: { gte: prevFrom, lte: prevTo } },
         select: { id: true, subtotal: true, status: true },
       }),
+      prisma.order.findMany({
+        where: { isDeleted: false },
+        select: { id: true, subtotal: true, status: true, createdAt: true, customerPhone: true },
+        orderBy: { createdAt: "asc" },
+      }),
     ]);
  
     const delivered = orders.filter(o => o.status === "DELIVERED");
     const canceled  = orders.filter(o => o.status === "CANCELED" || o.status === "CANCELLED");
+    const returned  = orders.filter(o => o.status === "RETURNED");
     const pending   = orders.filter(o => o.status === "PENDING");
     const shipped   = orders.filter(o => o.status === "SHIPPED");
  
     // ── Summary ──────────────────────────────────
-    const totalRevenue      = delivered.reduce((s, o) => s + Number(o.subtotal ?? 0), 0);
-    const totalOrders       = orders.length;
-    const avgOrderValue     = totalOrders > 0 ? totalRevenue / delivered.length || 0 : 0;
-    const totalItems        = delivered.reduce((s, o) => s + (o.orderItems?.reduce((ss, i) => ss + i.quantity, 0) || 0), 0);
-    const totalPlatformCharge = delivered.reduce((s, o) => s + Number(o.platformCharge ?? 0), 0);
-    const totalDeliveryCharge = delivered.reduce((s, o) => s + Number(o.deliveryChargeInside ?? o.deliveryChargeOutside ?? 0), 0);
+    const totalRevenue        = delivered.reduce((s, o) => s + Number(o.subtotal ?? 0), 0);
+    const totalPlatformCharge = delivered.length * PLATFORM_CHARGE;
+    const totalDeliveryCharge = delivered.length * DELIVERY_CHARGE;
+    const avgOrderValue       = delivered.length > 0 ? totalRevenue / delivered.length : 0;
+    const totalItems          = delivered.reduce((s, o) => s + (o.orderItems?.reduce((ss, i) => ss + i.quantity, 0) || 0), 0);
  
     // Previous period
     const prevDelivered = prevOrders.filter(o => o.status === "DELIVERED");
     const prevRevenue   = prevDelivered.reduce((s, o) => s + Number(o.subtotal ?? 0), 0);
     const growthRate    = prevRevenue > 0 ? Math.round(((totalRevenue - prevRevenue) / prevRevenue) * 100) : 100;
+ 
+    // ── All-time stats ────────────────────────────
+    const allTimeDelivered        = allTimeOrders.filter(o => o.status === "DELIVERED");
+    const allTimeRevenue          = allTimeDelivered.reduce((s, o) => s + Number(o.subtotal ?? 0), 0);
+    const allTimePlatformCharge   = allTimeDelivered.length * PLATFORM_CHARGE;
+    const allTimeDeliveryCharge   = allTimeDelivered.length * DELIVERY_CHARGE;
+ 
+    // ── Year-wise stats ───────────────────────────
+    const yearMap = {};
+    for (const o of allTimeOrders) {
+      const year = new Date(o.createdAt).getFullYear().toString();
+      if (!yearMap[year]) yearMap[year] = { year, revenue: 0, orders: 0, delivered: 0, platformCharge: 0, deliveryCharge: 0 };
+      yearMap[year].orders++;
+      if (o.status === "DELIVERED") {
+        yearMap[year].revenue          += Number(o.subtotal ?? 0);
+        yearMap[year].delivered++;
+        yearMap[year].platformCharge   += PLATFORM_CHARGE;
+        yearMap[year].deliveryCharge   += DELIVERY_CHARGE;
+      }
+    }
+    const yearWise = Object.values(yearMap).sort((a, b) => a.year.localeCompare(b.year));
  
     // ── Daily trend ──────────────────────────────
     const dailyMap = {};
@@ -2929,9 +2958,13 @@ export const getRevenueAnalysis = async (req, res) => {
     // ── Monthly trend ────────────────────────────
     const monthlyMap = {};
     for (const o of orders) {
-      const month = o.createdAt.toISOString().slice(0, 7); // YYYY-MM
-      if (!monthlyMap[month]) monthlyMap[month] = { month, revenue: 0, orders: 0 };
-      if (o.status === "DELIVERED") monthlyMap[month].revenue += Number(o.subtotal ?? 0);
+      const month = o.createdAt.toISOString().slice(0, 7);
+      if (!monthlyMap[month]) monthlyMap[month] = { month, revenue: 0, orders: 0, platformCharge: 0, deliveryCharge: 0 };
+      if (o.status === "DELIVERED") {
+        monthlyMap[month].revenue        += Number(o.subtotal ?? 0);
+        monthlyMap[month].platformCharge += PLATFORM_CHARGE;
+        monthlyMap[month].deliveryCharge += DELIVERY_CHARGE;
+      }
       monthlyMap[month].orders++;
     }
     const monthlyTrend = Object.values(monthlyMap).sort((a, b) => a.month.localeCompare(b.month));
@@ -2939,22 +2972,23 @@ export const getRevenueAnalysis = async (req, res) => {
     // ── Payment method ────────────────────────────
     const paymentMap = {};
     for (const o of orders) {
-      const method = o.paymentMethod || "Unknown";
+      const method = o.paymentMethod || "COD";
       if (!paymentMap[method]) paymentMap[method] = { method, count: 0, revenue: 0 };
       paymentMap[method].count++;
       if (o.status === "DELIVERED") paymentMap[method].revenue += Number(o.subtotal ?? 0);
     }
     const paymentBreakdown = Object.values(paymentMap).sort((a, b) => b.revenue - a.revenue);
  
-    // ── Order status breakdown ────────────────────
+    // ── Status breakdown ─────────────────────────
     const statusBreakdown = [
       { status: "DELIVERED", count: delivered.length, revenue: totalRevenue },
       { status: "PENDING",   count: pending.length,   revenue: 0 },
       { status: "SHIPPED",   count: shipped.length,   revenue: 0 },
       { status: "CANCELED",  count: canceled.length,  revenue: 0 },
+      { status: "RETURNED",  count: returned.length,  revenue: 0 },
     ];
  
-    // ── Peak ordering hours ───────────────────────
+    // ── Peak hours ───────────────────────────────
     const hourMap = {};
     for (const o of orders) {
       const hour = new Date(o.createdAt).getHours();
@@ -2962,11 +2996,10 @@ export const getRevenueAnalysis = async (req, res) => {
       hourMap[hour].count++;
     }
     const peakHours = Array.from({ length: 24 }, (_, h) => ({
-      hour: h, count: hourMap[h]?.count || 0,
-      label: `${h.toString().padStart(2, "0")}:00`,
+      hour: h, count: hourMap[h]?.count || 0, label: `${h.toString().padStart(2, "0")}:00`,
     }));
  
-    // ── Peak ordering days ────────────────────────
+    // ── Peak days ────────────────────────────────
     const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
     const dayMap = {};
     for (const o of orders) {
@@ -2978,7 +3011,7 @@ export const getRevenueAnalysis = async (req, res) => {
       day: d, name: dayNames[d], count: dayMap[d]?.count || 0,
     }));
  
-    // ── City wise revenue ─────────────────────────
+    // ── City wise ────────────────────────────────
     const cityMap = {};
     for (const o of delivered) {
       const city = o.customerCity || "Unknown";
@@ -2992,33 +3025,107 @@ export const getRevenueAnalysis = async (req, res) => {
     const customerMap = {};
     for (const o of delivered) {
       const key = o.customerPhone;
-      if (!customerMap[key]) customerMap[key] = {
-        name: o.customerName, phone: o.customerPhone,
-        revenue: 0, orders: 0,
-      };
+      if (!customerMap[key]) customerMap[key] = { name: o.customerName, phone: o.customerPhone, revenue: 0, orders: 0 };
       customerMap[key].revenue += Number(o.subtotal ?? 0);
       customerMap[key].orders++;
     }
-    const topCustomers = Object.values(customerMap)
-      .sort((a, b) => b.revenue - a.revenue)
+    const topCustomers    = Object.values(customerMap).sort((a, b) => b.revenue - a.revenue).slice(0, 10);
+    const repeatCustomers = Object.values(customerMap).filter(c => c.orders > 1).length;
+    const newCustomers    = Object.values(customerMap).filter(c => c.orders === 1).length;
+ 
+    // ── Cancel reasons ────────────────────────────
+    const cancelReasonMap = {};
+    for (const o of canceled) {
+      const reason = o.cancelReason || "Not specified";
+      if (!cancelReasonMap[reason]) cancelReasonMap[reason] = { reason, count: 0 };
+      cancelReasonMap[reason].count++;
+    }
+    const cancelReasons = Object.values(cancelReasonMap).sort((a, b) => b.count - a.count);
+ 
+    // ── Return/Refund ─────────────────────────────
+    const returnRate = orders.length > 0 ? Math.round((returned.length / orders.length) * 100) : 0;
+ 
+    // ── Coupon usage ─────────────────────────────
+    const couponOrders = orders.filter(o => o.couponId);
+    const couponMap    = {};
+    for (const o of couponOrders) {
+      const key = o.couponCode || o.couponId;
+      if (!couponMap[key]) couponMap[key] = { code: key, count: 0, revenue: 0, discount: 0 };
+      couponMap[key].count++;
+      couponMap[key].discount += Number(o.discount ?? 0);
+      if (o.status === "DELIVERED") couponMap[key].revenue += Number(o.subtotal ?? 0);
+    }
+    const couponStats = Object.values(couponMap).sort((a, b) => b.count - a.count).slice(0, 10);
+ 
+    // ── Delivery time ─────────────────────────────
+    const deliveryTimes = delivered
+      .filter(o => o.assignedAt && o.deliveredAt)
+      .map(o => Math.round((new Date(o.deliveredAt) - new Date(o.assignedAt)) / 60000))
+      .filter(m => m > 0 && m < 1440);
+ 
+    const avgDeliveryTime = deliveryTimes.length > 0 ? Math.round(deliveryTimes.reduce((s, m) => s + m, 0) / deliveryTimes.length) : 0;
+    const minDeliveryTime = deliveryTimes.length > 0 ? Math.min(...deliveryTimes) : 0;
+    const maxDeliveryTime = deliveryTimes.length > 0 ? Math.max(...deliveryTimes) : 0;
+ 
+    // ── Best delivery men ─────────────────────────
+    const deliveryManMap = {};
+    for (const o of delivered) {
+      if (!o.deliveryManId) continue;
+      const key = o.deliveryManId;
+      if (!deliveryManMap[key]) deliveryManMap[key] = { id: key, name: "Unknown", delivered: 0, revenue: 0, totalTime: 0, timeCount: 0 };
+      deliveryManMap[key].delivered++;
+      deliveryManMap[key].revenue += Number(o.subtotal ?? 0);
+      if (o.assignedAt && o.deliveredAt) {
+        const mins = Math.round((new Date(o.deliveredAt) - new Date(o.assignedAt)) / 60000);
+        if (mins > 0 && mins < 1440) { deliveryManMap[key].totalTime += mins; deliveryManMap[key].timeCount++; }
+      }
+    }
+ 
+    // Fetch delivery man names
+    const deliveryManIds = Object.keys(deliveryManMap);
+    if (deliveryManIds.length > 0) {
+      const deliveryMen = await prisma.user.findMany({
+        where: { id: { in: deliveryManIds } },
+        select: { id: true, name: true, phone: true },
+      });
+      for (const u of deliveryMen) {
+        if (deliveryManMap[u.id]) { deliveryManMap[u.id].name = u.name; deliveryManMap[u.id].phone = u.phone; }
+      }
+    }
+    const bestDeliveryMen = Object.values(deliveryManMap)
+      .map(d => ({ ...d, avgTime: d.timeCount > 0 ? Math.round(d.totalTime / d.timeCount) : 0 }))
+      .sort((a, b) => b.delivered - a.delivered)
       .slice(0, 10);
+ 
+    // ── Low stock ─────────────────────────────────
+    const lowStockProducts = await prisma.productAttribute.findMany({
+      where: { stockAmount: { lte: 5 }, isDeleted: false },
+      include: { product: { select: { name: true, brand: { select: { name: true } } } } },
+      orderBy: { stockAmount: "asc" },
+      take: 20,
+    });
  
     return res.status(200).json(jsonResponse(true, "Revenue analysis fetched", {
       summary: {
-        totalRevenue, totalOrders, avgOrderValue, totalItems,
+        totalRevenue, totalOrders: orders.length, avgOrderValue, totalItems,
         deliveredCount: delivered.length, canceledCount: canceled.length,
+        returnedCount: returned.length, returnRate,
         growthRate, prevRevenue, range, fromDate, toDate,
-        totalPlatformCharge,
-        totalDeliveryCharge,
+        totalPlatformCharge, totalDeliveryCharge,
+        allTimeRevenue, allTimePlatformCharge, allTimeDeliveryCharge,
+        allTimeOrders: allTimeDelivered.length,
+        newCustomers, repeatCustomers,
+        avgDeliveryTime, minDeliveryTime, maxDeliveryTime,
       },
-      dailyTrend,
-      monthlyTrend,
-      paymentBreakdown,
-      statusBreakdown,
-      peakHours,
-      peakDays,
-      cityWise,
-      topCustomers,
+      dailyTrend, monthlyTrend, yearWise,
+      paymentBreakdown, statusBreakdown,
+      peakHours, peakDays, cityWise,
+      topCustomers, cancelReasons, couponStats,
+      bestDeliveryMen,
+      lowStockProducts: lowStockProducts.map(p => ({
+        id: p.id, productName: p.product?.name,
+        brandName: p.product?.brand?.name, size: p.size, stock: p.stockAmount,
+      })),
     }));
  
   } catch (error) {
