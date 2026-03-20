@@ -33,8 +33,8 @@ router.delete("/v1/brands/:id", verify, deleteBrand);
 
 // ── Brand Owner Management (Admin) ─────────
 router.post("/v1/brand-owner/assign",         verify, assignBrandOwner);
-router.post("/v1/brand-owner/remove",         verify, removeBrandOwner);
-router.get("/v1/brand-owner/:brandId/owners", verify, getBrandOwners);
+router.post("/v1/brand-owner/remove",          removeBrandOwner);
+router.get("/v1/brand-owner/:brandId/owners",  getBrandOwners);
 
 // ── Brand Owner Portal ──────────────────────
 router.get("/v1/brand-owner/my-brands",       verify, getMyBrands);
