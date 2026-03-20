@@ -1188,7 +1188,7 @@ export const getBrandOwners = async (req, res) => {
     const { brandId } = req.params;
     const owners = await prisma.brandOwner.findMany({
       where: { brandId },
-      include: { user: { select: { id: true, name: true, email: true, phone: true } } },
+      include: { User: { select: { id: true, name: true, email: true, phone: true } } },
     });
     return res.status(200).json(jsonResponse(true, `${owners.length} owners found`, owners));
   } catch (error) {
