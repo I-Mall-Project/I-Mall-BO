@@ -1669,3 +1669,147 @@ export const createProductImage = async (req, res) => {
     return res.status(500).json(jsonResponse(false, error, null));
   }
 };
+
+
+export const getProductAnalysis = async (req, res) => {
+  try {
+    const {
+      from,
+      to,
+      brandId,
+      categoryId,
+      range = "monthly",
+    } = req.query;
+
+    // ── Date range ──────────────────────────────
+    const now = new Date();
+    let fromDate, toDate = to ? new Date(to) : now;
+
+    if (from) {
+      fromDate = new Date(from);
+    } else {
+      if (range === "daily")   fromDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      if (range === "weekly")  fromDate = new Date(now.getTime() - 7  * 24 * 60 * 60 * 1000);
+      if (range === "monthly") fromDate = new Date(now.getFullYear(), now.getMonth(), 1);
+      if (range === "yearly")  fromDate = new Date(now.getFullYear(), 0, 1);
+    }
+
+    // ── Filters ──────────────────────────────────
+    const orderWhere = {
+      isDeleted: false,
+      status: "DELIVERED",
+      createdAt: { gte: fromDate, lte: toDate },
+    };
+
+    const itemWhere = {
+      order: orderWhere,
+      ...(brandId    && { brandId }),
+      ...(categoryId && { product: { categoryId } }),
+    };
+
+    // ── Fetch all order items ────────────────────
+    const items = await prisma.orderItem.findMany({
+      where: itemWhere,
+      include: {
+        order: { select: { createdAt: true, status: true } },
+        product: { select: { id: true, name: true, categoryId: true, category: { select: { name: true } } } },
+      },
+    });
+
+    // ── Summary ──────────────────────────────────
+    const totalRevenue = items.reduce((s, i) => s + Number(i.totalPrice ?? 0), 0);
+    const totalCost    = items.reduce((s, i) => s + Number(i.totalCostPrice ?? 0), 0);
+    const totalProfit  = totalRevenue - totalCost;
+    const totalQty     = items.reduce((s, i) => s + i.quantity, 0);
+    const totalOrders  = new Set(items.map(i => i.orderId)).size;
+
+    // ── Product wise ─────────────────────────────
+    const productMap = {};
+    for (const item of items) {
+      const key = item.productId;
+      if (!productMap[key]) {
+        productMap[key] = {
+          productId:   key,
+          name:        item.name,
+          brandId:     item.brandId,
+          brandName:   item.brandName,
+          category:    item.product?.category?.name || "—",
+          revenue:     0,
+          cost:        0,
+          profit:      0,
+          qty:         0,
+          orders:      new Set(),
+        };
+      }
+      productMap[key].revenue += Number(item.totalPrice ?? 0);
+      productMap[key].cost    += Number(item.totalCostPrice ?? 0);
+      productMap[key].profit  += Number(item.totalPrice ?? 0) - Number(item.totalCostPrice ?? 0);
+      productMap[key].qty     += item.quantity;
+      productMap[key].orders.add(item.orderId);
+    }
+
+    const productAnalysis = Object.values(productMap)
+      .map(p => ({ ...p, orders: p.orders.size, margin: p.revenue > 0 ? Math.round((p.profit / p.revenue) * 100) : 0 }))
+      .sort((a, b) => b.revenue - a.revenue);
+
+    // ── Best selling top 10 ──────────────────────
+    const bestSelling = [...productAnalysis].sort((a, b) => b.qty - a.qty).slice(0, 10);
+
+    // ── Slow moving (bottom 10, min 1 sale) ──────
+    const slowMoving = [...productAnalysis]
+      .filter(p => p.qty > 0)
+      .sort((a, b) => a.qty - b.qty)
+      .slice(0, 10);
+
+    // ── Daily breakdown ──────────────────────────
+    const dailyMap = {};
+    for (const item of items) {
+      const day = item.order.createdAt.toISOString().split("T")[0];
+      if (!dailyMap[day]) dailyMap[day] = { date: day, revenue: 0, profit: 0, cost: 0, orders: new Set() };
+      dailyMap[day].revenue += Number(item.totalPrice ?? 0);
+      dailyMap[day].profit  += Number(item.totalPrice ?? 0) - Number(item.totalCostPrice ?? 0);
+      dailyMap[day].cost    += Number(item.totalCostPrice ?? 0);
+      dailyMap[day].orders.add(item.orderId);
+    }
+    const dailyTrend = Object.values(dailyMap)
+      .map(d => ({ ...d, orders: d.orders.size }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    // ── Brand wise ───────────────────────────────
+    const brandMap = {};
+    for (const item of items) {
+      const key = item.brandId || "unknown";
+      if (!brandMap[key]) brandMap[key] = { brandId: key, brandName: item.brandName || "Unknown", revenue: 0, profit: 0, qty: 0 };
+      brandMap[key].revenue += Number(item.totalPrice ?? 0);
+      brandMap[key].profit  += Number(item.totalPrice ?? 0) - Number(item.totalCostPrice ?? 0);
+      brandMap[key].qty     += item.quantity;
+    }
+    const brandWise = Object.values(brandMap).sort((a, b) => b.revenue - a.revenue);
+
+    // ── Category wise ────────────────────────────
+    const catMap = {};
+    for (const item of items) {
+      const key  = item.product?.categoryId || "unknown";
+      const name = item.product?.category?.name || "Unknown";
+      if (!catMap[key]) catMap[key] = { categoryId: key, categoryName: name, revenue: 0, profit: 0, qty: 0 };
+      catMap[key].revenue += Number(item.totalPrice ?? 0);
+      catMap[key].profit  += Number(item.totalPrice ?? 0) - Number(item.totalCostPrice ?? 0);
+      catMap[key].qty     += item.quantity;
+    }
+    const categoryWise = Object.values(catMap).sort((a, b) => b.revenue - a.revenue);
+
+    return res.status(200).json(jsonResponse(true, "Analysis fetched", {
+      summary:         { totalRevenue, totalCost, totalProfit, totalQty, totalOrders, range, fromDate, toDate },
+      productAnalysis,
+      bestSelling,
+      slowMoving,
+      dailyTrend,
+      brandWise,
+      categoryWise,
+    }));
+
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json(jsonResponse(false, error.message, null));
+  }
+};
