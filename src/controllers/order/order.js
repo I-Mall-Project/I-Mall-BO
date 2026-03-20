@@ -2867,6 +2867,7 @@ export const getOrdersForDeliveryMan = async (req, res) => {
 const PLATFORM_CHARGE = 10; // Fixed
 const DELIVERY_CHARGE = 30; // Fixed
 
+
 export const getRevenueAnalysis = async (req, res) => {
   try {
     const { range = "monthly", from, to } = req.query;
@@ -2974,6 +2975,40 @@ export const getRevenueAnalysis = async (req, res) => {
       monthlyMap[month].orders++;
     }
     const monthlyTrend = Object.values(monthlyMap).sort((a, b) => a.month.localeCompare(b.month));
+
+    // ── Product wise profit ───────────────────────
+    const productProfitMap = {};
+    for (const o of delivered) {
+      for (const item of (o.orderItems || [])) {
+        const key = item.productId || item.name;
+        if (!productProfitMap[key]) {
+          productProfitMap[key] = {
+            name:      item.name,
+            brandName: item.brandName || "—",
+            revenue:   0,
+            cost:      0,
+            profit:    0,
+            qty:       0,
+            orders:    new Set(),
+          };
+        }
+        const rev  = Number(item.totalPrice     ?? 0);
+        const cost = Number(item.totalCostPrice ?? 0);
+        productProfitMap[key].revenue += rev;
+        productProfitMap[key].cost    += cost;
+        productProfitMap[key].profit  += rev - cost;
+        productProfitMap[key].qty     += item.quantity;
+        productProfitMap[key].orders.add(o.id);
+      }
+    }
+    const topProfitProducts = Object.values(productProfitMap)
+      .map(p => ({
+        ...p,
+        orders: p.orders.size,
+        margin: p.revenue > 0 ? Math.round((p.profit / p.revenue) * 100) : 0,
+      }))
+      .sort((a, b) => b.profit - a.profit)
+      .slice(0, 15);
 
     // ── Payment method ────────────────────────────
     const paymentMap = {};
@@ -3128,7 +3163,7 @@ export const getRevenueAnalysis = async (req, res) => {
       paymentBreakdown, statusBreakdown,
       peakHours, peakDays, cityWise,
       topCustomers, cancelReasons, couponStats,
-      bestDeliveryMen,
+      bestDeliveryMen, topProfitProducts,
       lowStockProducts: lowStockProducts.map(p => ({
         id: p.id, productName: p.product?.name,
         brandName: p.product?.brand?.name, size: p.size, stock: p.stockAmount,
