@@ -1,5 +1,5 @@
 import telegramRoutes from "./telegram.js";
 
-const telegramRoutes = [telegramRoutes];
+const allTelegramRoutes = [telegramRoutes];
 
-export default telegramRoutes;
+export default allTelegramRoutes;

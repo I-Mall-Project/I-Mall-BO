@@ -7,8 +7,8 @@ import uploadToCLoudinary from "../../utils/uploadToCloudinary.js";
 import validateInput from "../../utils/validateInput.js";
 
 // controllers/telegram.controller.js
-import prisma from "../../utils/prismaClient.js";
-import sendTelegramMessage from "../../utils/sendTelegram.js";
+
+import sendTelegramMessage from "../../utils/Sendtelegram.js";
 
 // ✅ Delivery man /start পাঠালে chat_id save হবে
 export const telegramWebhook = async (req, res) => {
