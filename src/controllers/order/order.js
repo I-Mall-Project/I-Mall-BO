@@ -2765,6 +2765,47 @@ export const getMonthlyOrderCountYearWise = async (req, res) => {
 // delivery man
 
 // ✅ 1️⃣ Assign delivery man — assignedAt set করো
+// export const assignDeliveryManToOrder = async (req, res) => {
+//   try {
+//     const { orderId, deliveryManId } = req.body;
+ 
+//     if (!orderId || !deliveryManId) {
+//       return res.status(400).json(jsonResponse(false, "Order ID and Delivery Man ID are required", null));
+//     }
+ 
+//     const order = await prisma.order.update({
+//       where: { id: orderId },
+//       data: {
+//         deliveryManId,
+//         assignedAt: new Date(), // ✅ assign time save
+//       },
+//       include: { user: true, orderItems: true },
+//     });
+ 
+//     // send email to delivery man
+//     if (order && order.deliveryManId) {
+//       const deliveryMan = await prisma.user.findUnique({ where: { id: deliveryManId } });
+//       if (deliveryMan && deliveryMan.email) {
+//         const emailBody = `
+//           <p>Hi ${deliveryMan.name},</p>
+//           <p>You have been assigned a new order:</p>
+//           <p>Invoice: ${order.invoiceNumber}</p>
+//           <p>Customer: ${order.customerName} (${order.customerPhone})</p>
+//           <p>Address: ${order.customerAddress}, ${order.customerCity}</p>
+//         `;
+//         await sendEmail(deliveryMan.email, `New Order Assigned — Invoice #${order.invoiceNumber}`, emailBody);
+//       }
+//     }
+ 
+//     return res.status(200).json(jsonResponse(true, "Delivery man assigned successfully", order));
+//   } catch (error) {
+//     console.log(error);
+//     return res.status(500).json(jsonResponse(false, error.message || error, null));
+//   }
+// };
+ 
+
+// ✅ Assign delivery man — assignedAt set করো
 export const assignDeliveryManToOrder = async (req, res) => {
   try {
     const { orderId, deliveryManId } = req.body;
@@ -2777,15 +2818,19 @@ export const assignDeliveryManToOrder = async (req, res) => {
       where: { id: orderId },
       data: {
         deliveryManId,
-        assignedAt: new Date(), // ✅ assign time save
+        assignedAt: new Date(),
       },
       include: { user: true, orderItems: true },
     });
  
-    // send email to delivery man
+    // ✅ Delivery man info নাও
     if (order && order.deliveryManId) {
-      const deliveryMan = await prisma.user.findUnique({ where: { id: deliveryManId } });
-      if (deliveryMan && deliveryMan.email) {
+      const deliveryMan = await prisma.user.findUnique({
+        where: { id: deliveryManId },
+      });
+ 
+      // ── Email notification ──────────────────────
+      if (deliveryMan?.email) {
         const emailBody = `
           <p>Hi ${deliveryMan.name},</p>
           <p>You have been assigned a new order:</p>
@@ -2795,6 +2840,31 @@ export const assignDeliveryManToOrder = async (req, res) => {
         `;
         await sendEmail(deliveryMan.email, `New Order Assigned — Invoice #${order.invoiceNumber}`, emailBody);
       }
+ 
+      // ── Telegram notification ───────────────────
+      if (deliveryMan?.telegramChatId) {
+        const itemList = order.orderItems
+          ?.map(i => `  • ${i.name} ×${i.quantity}`)
+          .join("\n") || "—";
+ 
+        const message =
+`🛵 <b>নতুন Order Assign হয়েছে!</b>
+ 
+📋 <b>Invoice:</b> #${order.invoiceNumber}
+👤 <b>Customer:</b> ${order.customerName}
+📞 <b>Phone:</b> ${order.customerPhone}
+📍 <b>Address:</b> ${order.customerAddress}, ${order.customerCity}
+ 
+🛍️ <b>Items:</b>
+${itemList}
+ 
+💰 <b>Total:</b> ৳${order.subtotal}
+💳 <b>Payment:</b> ${order.paymentMethod || "COD"}
+ 
+⏰ Assigned: ${new Date().toLocaleString("bn-BD")}`;
+ 
+        await sendTelegramMessage(deliveryMan.telegramChatId, message);
+      }
     }
  
     return res.status(200).json(jsonResponse(true, "Delivery man assigned successfully", order));
@@ -2803,7 +2873,14 @@ export const assignDeliveryManToOrder = async (req, res) => {
     return res.status(500).json(jsonResponse(false, error.message || error, null));
   }
 };
- 
+
+
+
+
+
+
+
+
  
 // ✅ 2️⃣ Delivery man status update — DELIVERED হলে deliveredAt set করো
 export const updateOrderStatusByDeliveryMan = async (req, res) => {

@@ -81,6 +81,8 @@ model User {
   nidNo                           String?      @db.VarChar(50)
   nidAttachment                   String[]     @default([])
   passportPhoto                   String?
+  telegramChatId                  String?
+  brandOwners                     BrandOwner[]
   campaigns                       Campaign[]
   categories                      Category[]
   order                           Order[]
@@ -94,7 +96,6 @@ model User {
   children                        User[]       @relation("ParentIdUserId")
   role                            Role?        @relation(fields: [roleId], references: [id])
   wishlist                        Wishlist[]
-  brandOwners                     BrandOwner[] // ✅ NEW
 }
 
 model Banner {
@@ -206,9 +207,9 @@ model Brand {
   updatedAt    DateTime     @updatedAt
   brandID      String?      @db.VarChar(100)
   brandAddress String?
+  owners       BrandOwner[]
   category     Category[]
   product      Product[]
-  owners       BrandOwner[]
 }
 
 model Supplier {
