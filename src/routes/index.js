@@ -15,6 +15,7 @@ import reviewRoutes from "./review/index.js";
 import subcategoryRoutes from "./subcategory/index.js";
 import subsubcategoryRoutes from "./subsubcategory/index.js";
 import supplierRoutes from "./supplier/index.js";
+import  telegramRoutes from "./telegram/index.js";
 
 const allRoutes = [
   ...authRoutes,
@@ -34,6 +35,7 @@ const allRoutes = [
   ...reviewRoutes,
   ...newsletterRoutes,
   ...contactRoutes,
+  ...telegramRoutes,
 ];
 
 export default allRoutes;
