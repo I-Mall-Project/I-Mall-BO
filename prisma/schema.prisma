@@ -207,6 +207,8 @@ model Brand {
   updatedAt    DateTime     @updatedAt
   brandID      String?      @db.VarChar(100)
   brandAddress String?
+  lat          Float?
+  lng          Float?
   owners       BrandOwner[]
   category     Category[]
   product      Product[]
