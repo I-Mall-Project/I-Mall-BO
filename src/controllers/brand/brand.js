@@ -337,7 +337,10 @@ export const createBrand = async (req, res) => {
         name,
         isActive,
         brandID,
-        brandAddress
+        brandAddress,
+         lat,    // ✅ যোগ করো
+         lng,    // ✅ যোগ করো
+        
       } = req.body;
 
       // ⭐ Normalize input
@@ -388,11 +391,13 @@ export const createBrand = async (req, res) => {
 
       // ⭐ Prepare brand data
       const brandData = {
-        name,
-        slug: slugify(name),
-        isActive: isActive === "true",
-        brandID,
-        brandAddress: brandAddress || null,
+       name,
+  slug: slugify(name),
+  isActive: isActive === "true",
+  brandID,
+  brandAddress: brandAddress || null,
+  lat: lat ? parseFloat(lat) : null,    // ✅ যোগ করো
+  lng: lng ? parseFloat(lng) : null,    // ✅ যোগ করো
       };
 
       // ✅ Upload image if exists
@@ -851,7 +856,7 @@ export const updateBrand = async (req, res) => {
   try {
     const result = await prisma.$transaction(async (tx) => {
 
-      let { name, isActive, brandID, brandAddress } = req.body;
+      let { name, isActive, brandID, brandAddress , lat, lng } = req.body;
 
       const brandIdParam = req.params.id; // ⭐ REMOVE parseInt
 
@@ -913,6 +918,8 @@ export const updateBrand = async (req, res) => {
             : findBrand.isActive,
         brandID: brandID ?? findBrand.brandID,
         brandAddress: brandAddress ?? findBrand.brandAddress,
+        lat: lat ? parseFloat(lat) : findBrand.lat ?? null,   // ✅ যোগ করো
+lng: lng ? parseFloat(lng) : findBrand.lng ?? null,   // ✅ যোগ করো
       };
 
       // ✅ Image update
