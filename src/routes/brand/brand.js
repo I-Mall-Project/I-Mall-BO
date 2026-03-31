@@ -16,6 +16,7 @@ import {
   getMyBrandOrders,
   getMyBrandAnalytics,
   getMyBrandProducts,
+  getNearbyBrands
 } from "../../controllers/brand/brand.js";
 import verify from "../../utils/verifyToken.js";
 
@@ -30,6 +31,7 @@ router.get("/v1/brands", verify, getBrands);
 router.get("/v1/brands/:id", verify, getBrand);
 router.put("/v1/brands/:id", verify, upload.single("image"), updateBrand);
 router.delete("/v1/brands/:id", verify, deleteBrand);
+router.get("/v1/customer/brands/nearby", getNearbyBrands);
 
 // ── Brand Owner Management (Admin) ─────────
 router.post("/v1/brand-owner/assign",         verify, assignBrandOwner);
@@ -45,5 +47,8 @@ router.get("/v1/brand-owner/my-analytics",    verify, getMyBrandAnalytics);
 // ── Customer ────────────────────────────────
 router.get("/v1/customer/brands", getBrandsForCustomer);
 router.get("/v1/customer/brands/:id", getBrandForCustomer);
+
+
+
 
 export default router;

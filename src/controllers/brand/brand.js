@@ -1379,3 +1379,73 @@ export const getMyBrandProducts = async (req, res) => {
     return res.status(500).json(jsonResponse(false, error.message, null));
   }
 };
+
+
+// Haversine formula — দুই points এর মধ্যে distance (km)
+const getDistance = (lat1, lng1, lat2, lng2) => {
+  const R    = 6371; // Earth radius km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a    =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+    Math.cos((lat2 * Math.PI) / 180) *
+    Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+};
+ 
+// GET /v1/customer/brands/nearby?lat=23.73&lng=90.40&radius=10
+export const getNearbyBrands = async (req, res) => {
+  try {
+    const { lat, lng, radius = 10 } = req.query;
+ 
+    if (!lat || !lng) {
+      return res.status(400).json(jsonResponse(false, "lat and lng required", null));
+    }
+ 
+    const customerLat = parseFloat(lat);
+    const customerLng = parseFloat(lng);
+    const maxRadius   = parseFloat(radius);
+ 
+    // Location আছে এমন সব active brands নাও
+    const brands = await prisma.brand.findMany({
+      where: {
+        isActive: true,
+        lat:  { not: null },
+        lng:  { not: null },
+      },
+      select: {
+        id:          true,
+        name:        true,
+        image:       true,
+        slug:        true,
+        brandID:     true,
+        brandAddress: true,
+        lat:         true,
+        lng:         true,
+      },
+    });
+ 
+    // Distance calculate করো এবং filter করো
+    const nearbyBrands = brands
+      .map(brand => {
+        const distance = getDistance(customerLat, customerLng, brand.lat, brand.lng);
+        return { ...brand, distance: Math.round(distance * 10) / 10 }; // 1 decimal
+      })
+      .filter(brand => brand.distance <= maxRadius)
+      .sort((a, b) => a.distance - b.distance); // কাছেরটা আগে
+ 
+    if (nearbyBrands.length === 0) {
+      return res.status(200).json(jsonResponse(true, `${maxRadius} km এর মধ্যে কোনো brand নেই`, []));
+    }
+ 
+    return res.status(200).json(jsonResponse(true, `${nearbyBrands.length} brands found nearby`, nearbyBrands));
+ 
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json(jsonResponse(false, error.message, null));
+  }
+};
+
+
