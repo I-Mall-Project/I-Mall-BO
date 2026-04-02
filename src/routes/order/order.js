@@ -19,7 +19,9 @@ import {
   assignDeliveryManToOrder,
   getOrdersForDeliveryMan,
   updateOrderStatusByDeliveryMan,
-  getRevenueAnalysis 
+  getRevenueAnalysis ,
+  updateRiderLocationAndStatus,
+  getRiderStatus
 } from "../../controllers/order/order.js";
 import verify from "../../utils/verifyToken.js";
 
@@ -35,6 +37,8 @@ router.get("/v1/orders/month-wise/:year", verify, getMonthlyOrderCountYearWise);
 
 // ================== Delivery Man Routes ==================
 // ⚠️ এগুলো অবশ্যই /v1/orders/:id এর আগে থাকতে হবে
+router.post("/rider/location", verify, updateRiderLocationAndStatus);
+router.get("/rider/status", verify, getRiderStatus);
 router.post("/v1/orders/assign-delivery-man", verify, assignDeliveryManToOrder);
 router.get("/v1/orders/delivery-man", verify, getOrdersForDeliveryMan);
 router.put("/v1/orders/delivery-man/:id/status", verify, updateOrderStatusByDeliveryMan);

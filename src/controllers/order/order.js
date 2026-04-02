@@ -90,8 +90,7 @@ const generateInvoiceNumber = async (tx, brandID, productCode) => {
 
 
 
-// export const createOrder = async (req, res) => {
-//   try {
+
 //     const {
 //       userId,
 //       couponId,
@@ -1155,6 +1154,9 @@ export const createOrder = async (req, res) => {
     }
     await sendEmail("shamimrocky801@yahoo.com", `New Order Received — Invoice #${invoiceNumber}`, emailBody);
 
+    // newOrder create হওয়ার পরে, return এর আগে:
+autoAssignRider(prisma, newOrder, sendTelegramMessage).catch(console.error);
+
     return res.status(200).json(jsonResponse(true, "Your order has been placed successfully", newOrder));
 
   } catch (error) {
@@ -1163,131 +1165,8 @@ export const createOrder = async (req, res) => {
   }
 };
 
-// export const createOrderSsl = async (req, res) => {
-//   try {
-//     const {
-//       userId,
-//       couponId,
-//       customerName,
-//       customerPhone,
-//       customerAddress,
-//       customerBillingAddress,
-//       customerEmail,
-//       customerCity,
-//       customerPostalCode,
-//       invoiceNumber,
-//       paymentMethod,
-//       orderItems,
-//     } = req.body;
 
-//     if (!orderItems || orderItems.length === 0) {
-//       return res.status(404).json(jsonResponse(false, "Please select at least 1 item", null));
-//     }
 
-//     let totalNumberOfItems = 0;
-//     let subtotal = 0;
-//     let subtotalCost = 0;
-//     let newOrderItems = [];
-//     let allProductNames = "";
-
-//     for (let i = 0; i < orderItems.length; i++) {
-//       const product = await prisma.product.findFirst({
-//         where: { id: orderItems[i].productId, isDeleted: false, isActive: true },
-//       });
-//       const productAttribute = await prisma.productAttribute.findFirst({
-//         where: { id: orderItems[i].productAttributeId, isDeleted: false },
-//       });
-
-//       if (!product || !productAttribute) {
-//         return res.status(409).json(jsonResponse(false, "Product does not exist", null));
-//       }
-
-//       newOrderItems.push({
-//         ...orderItems[i],
-//         name: product.name,
-//         size: productAttribute.size,
-//         costPrice: productAttribute.costPrice,
-//         retailPrice: productAttribute.retailPrice,
-//         discountPercent: productAttribute.discountPercent,
-//         discountPrice: productAttribute.discountPrice,
-//         discountedRetailPrice: productAttribute.discountedRetailPrice,
-//         totalCostPrice: orderItems[i].quantity * productAttribute.costPrice,
-//         totalPrice: orderItems[i].quantity * productAttribute.discountedRetailPrice,
-//         quantity: orderItems[i].quantity,
-//       });
-
-//       totalNumberOfItems += orderItems[i].quantity;
-//       subtotal += orderItems[i].quantity * productAttribute.discountedRetailPrice;
-//       subtotalCost += orderItems[i].quantity * productAttribute.costPrice;
-//       allProductNames += (allProductNames ? ", " : "") + product.name;
-//     }
-
-//     const coupon = couponId
-//       ? await prisma.coupon.findFirst({ where: { id: couponId, isActive: true } })
-//       : undefined;
-
-//     if (paymentMethod?.toLowerCase() === "digital payment") {
-//       // ✅ Ensure postal code is always provided
-//       const postalCode = customerPostalCode || "1000";
-
-//       const data = {
-//         total_amount: subtotal - (coupon?.discountAmount ?? 0),
-//         currency: "BDT",
-//         tran_id: invoiceNumber,
-//         success_url: "https://isp-core.vercel.app/api/v1/orders-success",
-//         fail_url: "https://isp-core.vercel.app/api/v1/orders-fail",
-//         cancel_url: "https://isp-core.vercel.app/api/v1/orders-fail",
-//         ipn_url: "http://localhost:3000/ipn/",
-//         shipping_method: "N/A",
-//         product_name: allProductNames,
-//         product_category: "Product",
-//         product_profile: "general",
-//         cus_name: customerName,
-//         cus_email: customerEmail,
-//         cus_add1: customerBillingAddress || customerAddress,
-//         cus_add2: "",
-//         cus_city: customerCity,
-//         cus_state: customerCity,
-//         cus_postcode: postalCode,
-//         cus_country: "Bangladesh",
-//         cus_phone: customerPhone,
-//         cus_fax: "",
-//         ship_name: customerName,
-//         ship_add1: customerAddress,
-//         ship_add2: "",
-//         ship_city: customerCity,
-//         ship_state: customerCity,
-//         ship_postcode: postalCode,
-//         ship_country: "Bangladesh",
-//       };
-
-//       try {
-//         const sslcz = new SSLCommerzPayment(store_id, store_passwd, is_live);
-//         const apiResponse = await sslcz.init(data);
-
-//         console.log("SSLCommerz raw response:", apiResponse);
-
-//         if (!apiResponse || !apiResponse.GatewayPageURL) {
-//           return res.status(400).json(
-//             jsonResponse(false, "Failed to get Gateway URL", { error: apiResponse })
-//           );
-//         }
-
-//         return res.status(200).json(
-//           jsonResponse(true, "Redirecting to SSL COMMERZ.", { gateway: apiResponse.GatewayPageURL })
-//         );
-//       } catch (sslError) {
-//         console.error("SSLCommerz init error:", sslError);
-//         return res.status(500).json(jsonResponse(false, "SSLCommerz init failed", { error: sslError }));
-//       }
-//     } else {
-//       return res.status(400).json(jsonResponse(false, "Invalid payment method", null));
-//     }
-//   } catch (err) {
-//     console.error("createOrderSsl error:", err);
-//     return res.status(500).json(jsonResponse(false, "Order creation failed", { error: err }));
-//   }
-// };
 
 
 
@@ -1450,10 +1329,6 @@ export const createOrderSsl = async (req, res) => {
     // return;
   }
 };
-
-
-
-
 
 
 export const createOrderSuccess = async (req, res) => {
@@ -2093,179 +1968,6 @@ export const updateOrderStatusDelivered = async (orderId) => {
 
 
 
-
-
-
-
-
-
-
-
-// // 🔹 PDF generation
-// const generateProductPdf = (order, orderItems) => {
-//   return new Promise((resolve, reject) => {
-//     try {
-//       const pdfPath = path.join(process.cwd(), `order-${order.invoiceNumber}.pdf`);
-//       const doc = new PDFDocument({ size: "A4", margin: 50 });
-
-//       doc.pipe(fs.createWriteStream(pdfPath));
-
-//       doc.fontSize(20).fillColor("#2E86C1").text("File Box", { align: "center" });
-//       doc.moveDown();
-//       doc.fontSize(14).fillColor("#000").text(`Invoice: ${order.invoiceNumber}`);
-//       doc.text(`Customer: ${order.customerName}`);
-//       doc.text(`Email: ${order.customerEmail}`);
-//       doc.text(`Phone: ${order.customerPhone}`);
-//       doc.moveDown();
-
-//       // Table Header
-//       doc.fillColor("#ffffff").rect(50, doc.y, 500, 20).fill("#007BFF").stroke();
-//       doc.fillColor("#ffffff").text("Product", 55, doc.y - 18);
-//       doc.text("Size", 200, doc.y - 18);
-//       doc.text("Quantity", 300, doc.y - 18);
-//       doc.text("Price", 400, doc.y - 18);
-//       doc.text("Total", 470, doc.y - 18);
-//       doc.moveDown();
-
-//       // Table Content
-//       orderItems.forEach((item) => {
-//         doc.fillColor("#000");
-//         doc.text(item.name, 55, doc.y);
-//         doc.text(item.size, 200, doc.y);
-//         doc.text(item.quantity.toString(), 300, doc.y);
-//         doc.text(item.discountedRetailPrice.toString() + " TK", 400, doc.y);
-//         doc.text(item.totalPrice.toString() + " TK", 470, doc.y);
-//         doc.moveDown();
-//         doc.fillColor("#555").fontSize(10).text(`Description: ${item.longDescription || "N/A"}`, { indent: 20 });
-//         doc.moveDown();
-//       });
-
-//       // Footer
-//       doc.moveDown();
-//       doc.fontSize(12).fillColor("#000").text(`Subtotal: ${order.subtotal} TK`, { align: "right" });
-//       doc.text(`Delivery Charge: ${order.deliveryChargeInside ?? 0} TK`, { align: "right" });
-//       doc.text(`Total Items: ${order.totalItems}`, { align: "right" });
-
-//       doc.end();
-//       resolve(pdfPath);
-//     } catch (err) {
-//       reject(err);
-//     }
-//   });
-// };
-
-// // 🔹 Mail sending
-// const sendDeliveredMailWithPdf = async (order, orderItems) => {
-//   try {
-//     console.log("📨 Preparing to send mail for order:", order.id);
-
-//     const transporter = nodemailer.createTransport({
-//       service: "gmail",
-//       auth: {
-//         user: process.env.GMAIL_ID,
-//         pass: process.env.GMAIL_PASS,
-//       },
-//     });
-
-//     // Generate PDF
-//     const pdfPath = await generateProductPdf(order, orderItems);
-
-//     // Build product table HTML for mail body
-//     const productListHtml = orderItems
-//       .map((item) => {
-//         const url = item.driveUrl?.trim() || "#";
-//         return `
-//           <tr>
-//             <td>${item.name}</td>
-//             <td>${item.size}</td>
-//             <td><a href="${url}" target="_blank" style="background:#007BFF;color:white;padding:6px 12px;border-radius:4px;text-decoration:none;">Download</a></td>
-           
-//           </tr>
-//         `;
-//       })
-//       .join("");
-
-//     const mailOptions = {
-//       from: `"File Box" <${process.env.GMAIL_ID}>`,
-//       to: order.customerEmail,
-//       subject: `🎉 Your Order ${order.invoiceNumber} is Delivered`,
-//       html: `
-//         <div style="font-family:Arial,sans-serif;background:#f7f9fc;padding:20px;border-radius:10px;">
-//           <h2>Hello ${order.customerName},</h2>
-//           <p>Your digital products are ready! Download from below links or see attached PDF.</p>
-//           <table style="width:100%;border-collapse:collapse;margin-top:10px;">
-//             <thead>
-//               <tr style="background:#007BFF;color:white;">
-//                 <th>Product</th>
-//                 <th>Size</th>
-//                 <th>Download</th>
-//                 <th>Description</th>
-//               </tr>
-//             </thead>
-//             <tbody>${productListHtml}</tbody>
-//           </table>
-//           <p style="margin-top:20px;">Thank you for shopping with <b>File Box</b> 💙</p>
-//         </div>
-//       `,
-//       attachments: [
-//         {
-//           filename: `Invoice-${order.invoiceNumber}.pdf`,
-//           path: pdfPath,
-//         },
-//       ],
-//     };
-
-//     console.log("📨 Sending mail to:", order.customerEmail);
-//     const info = await transporter.sendMail(mailOptions);
-//     console.log("✅ Mail sent successfully:", info.messageId);
-//   } catch (err) {
-//     console.error("❌ Failed to send delivered mail:", err);
-//   }
-// };
-
-// // 🔹 Update Order controller
-// export const updateOrder = async (req, res) => {
-//   try {
-//     const { status } = req.body;
-
-//     const order = await prisma.order.findUnique({
-//       where: { id: req.params.id },
-//       include: { orderItems: true },
-//     });
-
-//     if (!order) {
-//       return res.status(404).json({ success: false, message: "Order not found" });
-//     }
-
-//     const updatedOrder = await prisma.order.update({
-//       where: { id: req.params.id },
-//       data: { status },
-//       include: { orderItems: true },
-//     });
-
-//     console.log("updateOrder called for orderId:", updatedOrder.id, "with status:", status);
-
-//     if (status === "DELIVERED") {
-//       console.log("🔹 Triggering delivered mail outside transaction...");
-//       await sendDeliveredMailWithPdf(updatedOrder, updatedOrder.orderItems);
-//     }
-
-//     return res.status(200).json({ success: true, message: "Order updated", data: updatedOrder });
-//   } catch (err) {
-//     console.error(err);
-//     return res.status(500).json({ success: false, message: err.message });
-//   }
-// };
-
-
-
-
-
-
-
-
-
-//delete order
 export const deleteOrder = async (req, res) => {
   try {
     return await prisma.$transaction(async (tx) => {
@@ -2290,36 +1992,8 @@ export const deleteOrder = async (req, res) => {
   }
 };
 
-// track order by invoice number
-// backend/controllers/orderController.ts
-// export const trackOrder = async (req, res) => {
-//   try {
-//     const { invoice } = req.query;
-//     if (!invoice) return res.status(400).json({ success: false, message: "Invoice number required", data: null });
 
-//     const order = await prisma.order.findFirst({
-//       where: { invoiceNumber: invoice },
-//       include: { orderItems: true },
-//     });
 
-//     if (!order) return res.status(404).json({ success: false, message: "Order not found", data: null });
-
-//     return res.status(200).json({
-//       success: true,
-//       message: "Order fetched successfully",
-//       data: {
-//         invoice: order.invoiceNumber,
-//         status: order.status,
-//         updatedAt: order.updatedAt,
-//         estimatedDelivery: order.estimatedDelivery,
-//         orderItems: order.orderItems,
-//       },
-//     });
-//   } catch (err) {
-//     console.error(err);
-//     return res.status(500).json({ success: false, message: err.message, data: null });
-//   }
-// };
 
 // ✅ Delivery man location update করবে
 export const updateDeliveryLocation = async (req, res) => {
@@ -2547,6 +2221,63 @@ const getRouteETA = async (fromLat, fromLng, toLat, toLng) => {
   } catch (err) {
     console.error("ORS Error:", err.message);
     return null;
+  }
+};
+
+// ✅ 1. Rider Online/Offline toggle + location update
+// Rider dashboard থেকে প্রতি 10s এ call হবে
+export const updateRiderLocationAndStatus = async (req, res) => {
+  try {
+    const riderId = req.user.id;
+    const { lat, lng, isOnline } = req.body;
+
+    await prisma.riderLocation.upsert({
+      where: { deliveryManId: riderId },
+      update: {
+        ...(lat && { lat: parseFloat(lat) }),
+        ...(lng && { lng: parseFloat(lng) }),
+        ...(isOnline !== undefined && { isOnline }),
+        updatedAt: new Date(),
+      },
+      create: {
+        deliveryManId: riderId,
+        lat: parseFloat(lat) || 0,
+        lng: parseFloat(lng) || 0,
+        isOnline: isOnline ?? false,
+      },
+    });
+
+    return res.status(200).json(jsonResponse(true, "Updated", null));
+  } catch (error) {
+    return res.status(500).json(jsonResponse(false, error.message, null));
+  }
+};
+
+// ✅ 2. Rider এর current status (dashboard load এ call হবে)
+export const getRiderStatus = async (req, res) => {
+  try {
+    const riderId = req.user.id;
+
+    const [riderLocation, activeOrder] = await Promise.all([
+      prisma.riderLocation.findUnique({
+        where: { deliveryManId: riderId },
+      }),
+      prisma.order.findFirst({
+        where: {
+          deliveryManId: riderId,
+          status: { notIn: ["DELIVERED", "CANCELLED"] },
+          isDeleted: false,
+        },
+        include: { orderItems: true },
+      }),
+    ]);
+
+    return res.status(200).json(jsonResponse(true, "Rider status", {
+      isOnline: riderLocation?.isOnline ?? false,
+      activeOrder: activeOrder ?? null,
+    }));
+  } catch (error) {
+    return res.status(500).json(jsonResponse(false, error.message, null));
   }
 };
 
@@ -2806,6 +2537,181 @@ export const getMonthlyOrderCountYearWise = async (req, res) => {
 // };
  
 
+export function getDistanceKm(lat1, lng1, lat2, lng2) {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// ── Pending offers tracker ───────────────────────────────
+// { orderId: { riderId, timeoutId, resolve } }
+const pendingOffers = new Map();
+
+// Webhook থেকে call হবে — rider accept/reject করলে
+export function resolveOffer(orderId, riderId, accepted) {
+  const offer = pendingOffers.get(orderId);
+  if (!offer || offer.riderId !== riderId) return false;
+  clearTimeout(offer.timeoutId);
+  pendingOffers.delete(orderId);
+  offer.resolve(accepted);
+  return true;
+}
+
+// ── Offer পাঠাও, response এর জন্য wait করো ─────────────
+function sendOffer(telegramChatId, orderId, rider, order, sendTelegramMessage) {
+  return new Promise((resolve) => {
+    const TIMEOUT_SEC = 45;
+
+    sendTelegramMessage(
+      telegramChatId,
+`🛵 <b>নতুন Order Offer!</b>
+
+📋 <b>Invoice:</b> #${order.invoiceNumber}
+👤 <b>Customer:</b> ${order.customerName}
+📞 <b>Phone:</b> ${order.customerPhone}
+📍 <b>Address:</b> ${order.customerAddress}, ${order.customerCity}
+📏 <b>Distance:</b> ${rider.distance.toFixed(2)} km
+⏰ <b>${TIMEOUT_SEC} সেকেন্ডের মধ্যে Accept করুন!</b>`,
+      {
+        reply_markup: {
+          inline_keyboard: [[
+            { text: "✅ Accept", callback_data: `accept_${orderId}` },
+            { text: "❌ Reject", callback_data: `reject_${orderId}` },
+          ]],
+        },
+      }
+    );
+
+    const timeoutId = setTimeout(() => {
+      pendingOffers.delete(orderId);
+      resolve(false);
+    }, TIMEOUT_SEC * 1000);
+
+    pendingOffers.set(orderId, { riderId: rider.id, timeoutId, resolve });
+  });
+}
+
+// ── Main function ────────────────────────────────────────
+export async function autoAssignRider(prisma, order, sendTelegramMessage) {
+  const { customerLat, customerLng } = order;
+  if (!customerLat || !customerLng) return null;
+
+  // ✅ শুধু Online rider যাদের location আছে এবং active order নেই
+  const allRiders = await prisma.user.findMany({
+    where: {
+      roleId: "8b468586-1419-4479-9037-cb355a626085",
+      RiderLocation: { isNot: null },
+    },
+    select: {
+      id: true,
+      name: true,
+      phone: true,
+      telegramChatId: true,
+      RiderLocation: {
+        select: { lat: true, lng: true, isOnline: true },
+      },
+      orders: {
+        where: {
+          status: { notIn: ["DELIVERED", "CANCELLED"] },
+          isDeleted: false,
+        },
+        select: { id: true },
+        take: 1,
+      },
+    },
+  });
+
+  // ✅ Online + available (active order নেই)
+  const sorted = allRiders
+    .filter((r) => r.RiderLocation?.isOnline && r.orders.length === 0)
+    .map((r) => ({
+      ...r,
+      distance: getDistanceKm(
+        customerLat, customerLng,
+        r.RiderLocation.lat, r.RiderLocation.lng
+      ),
+    }))
+    .sort((a, b) => a.distance - b.distance);
+
+  if (!sorted.length) {
+    await notifyAdmin(order, sendTelegramMessage);
+    return null;
+  }
+
+  for (const rider of sorted) {
+    if (!rider.telegramChatId) continue;
+
+    // Race condition check
+    const activeNow = await prisma.order.count({
+      where: {
+        deliveryManId: rider.id,
+        status: { notIn: ["DELIVERED", "CANCELLED"] },
+        isDeleted: false,
+      },
+    });
+    if (activeNow > 0) continue;
+
+    // ✅ Offer পাঠাও
+    const accepted = await sendOffer(
+      rider.telegramChatId, order.id, rider, order, sendTelegramMessage
+    );
+
+    if (!accepted) {
+      await sendTelegramMessage(
+        rider.telegramChatId,
+        `⏰ Order #${order.invoiceNumber} অন্য rider কে দেওয়া হয়েছে।`
+      );
+      continue;
+    }
+
+    // ✅ Assign করো
+    await prisma.order.update({
+      where: { id: order.id },
+      data: { deliveryManId: rider.id, assignedAt: new Date() },
+    });
+
+    const bdTime = new Date(Date.now() + 6 * 60 * 60 * 1000)
+      .toISOString().replace("T", " ").slice(0, 16);
+
+    await sendTelegramMessage(
+      rider.telegramChatId,
+`✅ <b>Order Confirmed!</b>
+
+📋 <b>Invoice:</b> #${order.invoiceNumber}
+👤 <b>Customer:</b> ${order.customerName}
+📞 <b>Phone:</b> <a href="tel:${order.customerPhone}">${order.customerPhone}</a>
+📍 <b>Address:</b> ${order.customerAddress}, ${order.customerCity}
+📏 <b>Distance:</b> ${rider.distance.toFixed(2)} km
+⏰ <b>Assigned:</b> ${bdTime} (BD Time)
+
+👉 <a href="https://admin.i-mall.com.bd/delivery">Dashboard এ যান</a>`
+    );
+
+    return rider;
+  }
+
+  await notifyAdmin(order, sendTelegramMessage);
+  return null;
+}
+
+async function notifyAdmin(order, sendTelegramMessage) {
+  const ADMIN_ID = process.env.ADMIN_TELEGRAM_CHAT_ID;
+  if (!ADMIN_ID) return;
+  await sendTelegramMessage(ADMIN_ID,
+`⚠️ <b>কোনো Rider পাওয়া যায়নি!</b>
+📋 Invoice #${order.invoiceNumber}
+👤 ${order.customerName} — ${order.customerPhone}
+📍 ${order.customerAddress}, ${order.customerCity}
+👉 Manual assign করুন।`
+  );
+}
+
 // ✅ Assign delivery man — assignedAt set করো
 
 // ✅ Assign delivery man — assignedAt set করো
@@ -2913,37 +2819,43 @@ export const updateOrderStatusByDeliveryMan = async (req, res) => {
     const deliveryManId = req.user.id;
     const { id } = req.params;
     const { status } = req.body;
- 
+
     if (!status) {
       return res.status(400).json(jsonResponse(false, "Status is required", null));
     }
- 
+
     const order = await prisma.order.findUnique({ where: { id } });
- 
+
     if (!order) {
       return res.status(404).json(jsonResponse(false, "Order not found", null));
     }
- 
+
     if (order.deliveryManId !== deliveryManId) {
       return res.status(403).json(jsonResponse(false, "You can only update your assigned orders", null));
     }
- 
-    const updatedOrder = await prisma.order.update({
-      where: { id },
-      data: {
-        status,
-        // ✅ DELIVERED হলে deliveredAt save করো
-        ...(status === "DELIVERED" && { deliveredAt: new Date() }),
-      },
-    });
- 
-    return res.status(200).json(jsonResponse(true, "Order status updated successfully", updatedOrder));
+
+    // ✅ DELIVERED হলে transaction এ করো
+    if (status === "DELIVERED") {
+      await prisma.$transaction([
+        prisma.order.update({
+          where: { id },
+          data: { status, deliveredAt: new Date() },
+        }),
+        // ✅ Rider আবার available — isOnline ঠিক থাকবে
+        // RiderLocation এ কোনো change নেই, শুধু order নেই বলেই available
+      ]);
+    } else {
+      await prisma.order.update({
+        where: { id },
+        data: { status },
+      });
+    }
+
+    return res.status(200).json(jsonResponse(true, "Order status updated successfully", null));
   } catch (error) {
-    console.log(error);
-    return res.status(500).json(jsonResponse(false, error.message || error, null));
+    return res.status(500).json(jsonResponse(false, error.message, null));
   }
 };
-
 // 2️⃣ Delivery man sees only their assigned orders
 export const getOrdersForDeliveryMan = async (req, res) => {
   try {

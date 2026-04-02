@@ -50,7 +50,7 @@ model RoleModule {
 }
 
 model User {
-  id                              String       @id @default(uuid())
+  id                              String         @id @default(uuid())
   roleId                          String?
   parentId                        String?
   name                            String
@@ -61,40 +61,41 @@ model User {
   country                         String?
   city                            String?
   postalCode                      String?
-  image                           String?      @default("images/user/user.png")
+  image                           String?        @default("images/user/user.png")
   password                        String?
   otp                             Int?
-  otpCount                        Int?         @default(0)
-  initialPaymentAmount            Float?       @default(0)
-  initialPaymentDue               Float?       @default(0)
-  installmentTime                 Float?       @default(0)
+  otpCount                        Int?           @default(0)
+  initialPaymentAmount            Float?         @default(0)
+  initialPaymentDue               Float?         @default(0)
+  installmentTime                 Float?         @default(0)
   refreshToken                    String?
-  isActive                        Boolean      @default(true)
-  isDeleted                       Boolean      @default(false)
+  isActive                        Boolean        @default(true)
+  isDeleted                       Boolean        @default(false)
   createdBy                       String?
   updatedBy                       String?
   deletedBy                       String?
-  createdAt                       DateTime     @default(now())
-  updatedAt                       DateTime     @updatedAt
+  createdAt                       DateTime       @default(now())
+  updatedAt                       DateTime       @updatedAt
   presentAddress                  String?
   permanentAddress                String?
-  nidNo                           String?      @db.VarChar(50)
-  nidAttachment                   String[]     @default([])
+  nidNo                           String?        @db.VarChar(50)
+  nidAttachment                   String[]       @default([])
   passportPhoto                   String?
   telegramChatId                  String?
   brandOwners                     BrandOwner[]
   campaigns                       Campaign[]
   categories                      Category[]
   order                           Order[]
-  Order_Order_deliveryManIdToUser Order[]      @relation("Order_deliveryManIdToUser")
+  Order_Order_deliveryManIdToUser Order[]        @relation("Order_deliveryManIdToUser")
   payments                        Payment[]
   preorder                        Preorder[]
   products                        Product[]
   review                          Review[]
+  RiderLocation                   RiderLocation?
   suppliers                       Supplier[]
-  parent                          User?        @relation("ParentIdUserId", fields: [parentId], references: [id])
-  children                        User[]       @relation("ParentIdUserId")
-  role                            Role?        @relation(fields: [roleId], references: [id])
+  parent                          User?          @relation("ParentIdUserId", fields: [parentId], references: [id])
+  children                        User[]         @relation("ParentIdUserId")
+  role                            Role?          @relation(fields: [roleId], references: [id])
   wishlist                        Wishlist[]
 }
 
@@ -462,6 +463,16 @@ model BrandOwner {
   User      User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@unique([brandId, userId])
+}
+
+model RiderLocation {
+  id            String   @id @default(dbgenerated("(gen_random_uuid())::text"))
+  deliveryManId String   @unique
+  lat           Float
+  lng           Float
+  isOnline      Boolean  @default(false)
+  updatedAt     DateTime @default(now()) @db.Timestamp(6)
+  User          User     @relation(fields: [deliveryManId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 }
 
 enum OrderStatus {
