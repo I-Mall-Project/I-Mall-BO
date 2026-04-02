@@ -80,7 +80,7 @@ export async function autoAssignRider(prisma, order, sendTelegramMessage) {
       // ✅ orders → order (singular)
       order: {
         where: {
-          status: { notIn: ["DELIVERED", "CANCELLED"] },
+          status: { notIn: ["PENDING","SHIPPED","DELIVERED", "RETURNED","CANCELLED"] },
           isDeleted: false,
         },
         select: { id: true },
@@ -125,7 +125,7 @@ export async function autoAssignRider(prisma, order, sendTelegramMessage) {
     const activeNow = await prisma.order.count({
       where: {
         deliveryManId: rider.id,
-        status: { notIn: ["DELIVERED", "CANCELLED"] },
+        status: { notIn: ["PENDING","SHIPPED","DELIVERED", "RETURNED","CANCELLED"] },
         isDeleted: false,
       },
     });
