@@ -10,11 +10,8 @@ export function getDistanceKm(lat1, lng1, lat2, lng2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-// ── Pending offers tracker ───────────────────────────────
-// { orderId: { riderId, timeoutId, resolve } }
 const pendingOffers = new Map();
 
-// Webhook থেকে call হবে — rider accept/reject করলে
 export function resolveOffer(orderId, riderId, accepted) {
   const offer = pendingOffers.get(orderId);
   if (!offer || offer.riderId !== riderId) return false;
@@ -24,7 +21,6 @@ export function resolveOffer(orderId, riderId, accepted) {
   return true;
 }
 
-// ── Offer পাঠাও, response এর জন্য wait করো ─────────────
 function sendOffer(telegramChatId, orderId, rider, order, sendTelegramMessage) {
   return new Promise((resolve) => {
     const TIMEOUT_SEC = 45;
@@ -58,12 +54,16 @@ function sendOffer(telegramChatId, orderId, rider, order, sendTelegramMessage) {
   });
 }
 
-// ── Main function ────────────────────────────────────────
 export async function autoAssignRider(prisma, order, sendTelegramMessage) {
   const { customerLat, customerLng } = order;
-  if (!customerLat || !customerLng) return null;
 
-  // ✅ শুধু Online rider যাদের location আছে এবং active order নেই
+  console.log("🔍 autoAssignRider called", { orderId: order.id, customerLat, customerLng });
+
+  if (!customerLat || !customerLng) {
+    console.log("❌ customerLat/customerLng নেই");
+    return null;
+  }
+
   const allRiders = await prisma.user.findMany({
     where: {
       roleId: "8b468586-1419-4479-9037-cb355a626085",
@@ -77,7 +77,8 @@ export async function autoAssignRider(prisma, order, sendTelegramMessage) {
       RiderLocation: {
         select: { lat: true, lng: true, isOnline: true },
       },
-      orders: {
+      // ✅ orders → order (singular)
+      order: {
         where: {
           status: { notIn: ["DELIVERED", "CANCELLED"] },
           isDeleted: false,
@@ -88,9 +89,14 @@ export async function autoAssignRider(prisma, order, sendTelegramMessage) {
     },
   });
 
-  // ✅ Online + available (active order নেই)
+  console.log("👥 Riders found:", allRiders.length);
+  allRiders.forEach(r => {
+    console.log(`  - ${r.name} | online: ${r.RiderLocation?.isOnline} | activeOrders: ${r.order.length} | telegramId: ${r.telegramChatId}`);
+  });
+
+  // ✅ orders → order (singular)
   const sorted = allRiders
-    .filter((r) => r.RiderLocation?.isOnline && r.orders.length === 0)
+    .filter((r) => r.RiderLocation?.isOnline && r.order.length === 0)
     .map((r) => ({
       ...r,
       distance: getDistanceKm(
@@ -100,15 +106,22 @@ export async function autoAssignRider(prisma, order, sendTelegramMessage) {
     }))
     .sort((a, b) => a.distance - b.distance);
 
+  console.log("✅ Available online riders:", sorted.length);
+
   if (!sorted.length) {
+    console.log("⚠️ কোনো available rider নেই");
     await notifyAdmin(order, sendTelegramMessage);
     return null;
   }
 
   for (const rider of sorted) {
-    if (!rider.telegramChatId) continue;
+    console.log(`📨 Offer পাঠাচ্ছি: ${rider.name} (${rider.distance.toFixed(2)} km)`);
 
-    // Race condition check
+    if (!rider.telegramChatId) {
+      console.log(`❌ ${rider.name} এর telegramChatId নেই — skip`);
+      continue;
+    }
+
     const activeNow = await prisma.order.count({
       where: {
         deliveryManId: rider.id,
@@ -116,14 +129,18 @@ export async function autoAssignRider(prisma, order, sendTelegramMessage) {
         isDeleted: false,
       },
     });
-    if (activeNow > 0) continue;
 
-    // ✅ Offer পাঠাও
+    if (activeNow > 0) {
+      console.log(`⚠️ ${rider.name} এর মধ্যে busy হয়ে গেছে — skip`);
+      continue;
+    }
+
     const accepted = await sendOffer(
       rider.telegramChatId, order.id, rider, order, sendTelegramMessage
     );
 
     if (!accepted) {
+      console.log(`❌ ${rider.name} reject/timeout করেছে`);
       await sendTelegramMessage(
         rider.telegramChatId,
         `⏰ Order #${order.invoiceNumber} অন্য rider কে দেওয়া হয়েছে।`
@@ -131,7 +148,8 @@ export async function autoAssignRider(prisma, order, sendTelegramMessage) {
       continue;
     }
 
-    // ✅ Assign করো
+    console.log(`✅ ${rider.name} accept করেছে — assign হচ্ছে`);
+
     await prisma.order.update({
       where: { id: order.id },
       data: { deliveryManId: rider.id, assignedAt: new Date() },
