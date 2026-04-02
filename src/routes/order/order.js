@@ -37,7 +37,7 @@ router.get("/v1/orders/month-wise/:year", verify, getMonthlyOrderCountYearWise);
 
 // ================== Delivery Man Routes ==================
 // ⚠️ এগুলো অবশ্যই /v1/orders/:id এর আগে থাকতে হবে
-router.post("/rider/location", verify, updateRiderLocationAndStatus);
+router.post("/v1/rider/location", verify, updateRiderLocationAndStatus);
 router.get("/rider/status", verify, getRiderStatus);
 router.post("/v1/orders/assign-delivery-man", verify, assignDeliveryManToOrder);
 router.get("/v1/orders/delivery-man", verify, getOrdersForDeliveryMan);
