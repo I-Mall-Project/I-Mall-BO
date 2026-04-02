@@ -15,6 +15,7 @@ import striptags from "striptags";
 
 import nodemailer from "nodemailer";
 import sendTelegramMessage from "../../utils/Sendtelegram.js";
+import { autoAssignRider } from "../../utils/assignRider.js";
 
 
 
@@ -1155,7 +1156,7 @@ export const createOrder = async (req, res) => {
     await sendEmail("shamimrocky801@yahoo.com", `New Order Received — Invoice #${invoiceNumber}`, emailBody);
 
     // newOrder create হওয়ার পরে, return এর আগে:
-autoAssignRider(prisma, newOrder, sendTelegramMessage).catch(console.error);
+     autoAssignRider(prisma, newOrder, sendTelegramMessage).catch(console.error);
 
     return res.status(200).json(jsonResponse(true, "Your order has been placed successfully", newOrder));
 
@@ -2597,120 +2598,7 @@ function sendOffer(telegramChatId, orderId, rider, order, sendTelegramMessage) {
   });
 }
 
-// ── Main function ────────────────────────────────────────
-export async function autoAssignRider(prisma, order, sendTelegramMessage) {
-  const { customerLat, customerLng } = order;
-  if (!customerLat || !customerLng) return null;
 
-  // ✅ শুধু Online rider যাদের location আছে এবং active order নেই
-  const allRiders = await prisma.user.findMany({
-    where: {
-      roleId: "8b468586-1419-4479-9037-cb355a626085",
-      RiderLocation: { isNot: null },
-    },
-    select: {
-      id: true,
-      name: true,
-      phone: true,
-      telegramChatId: true,
-      RiderLocation: {
-        select: { lat: true, lng: true, isOnline: true },
-      },
-      orders: {
-        where: {
-          status: { notIn: ["DELIVERED", "CANCELLED"] },
-          isDeleted: false,
-        },
-        select: { id: true },
-        take: 1,
-      },
-    },
-  });
-
-  // ✅ Online + available (active order নেই)
-  const sorted = allRiders
-    .filter((r) => r.RiderLocation?.isOnline && r.orders.length === 0)
-    .map((r) => ({
-      ...r,
-      distance: getDistanceKm(
-        customerLat, customerLng,
-        r.RiderLocation.lat, r.RiderLocation.lng
-      ),
-    }))
-    .sort((a, b) => a.distance - b.distance);
-
-  if (!sorted.length) {
-    await notifyAdmin(order, sendTelegramMessage);
-    return null;
-  }
-
-  for (const rider of sorted) {
-    if (!rider.telegramChatId) continue;
-
-    // Race condition check
-    const activeNow = await prisma.order.count({
-      where: {
-        deliveryManId: rider.id,
-        status: { notIn: ["DELIVERED", "CANCELLED"] },
-        isDeleted: false,
-      },
-    });
-    if (activeNow > 0) continue;
-
-    // ✅ Offer পাঠাও
-    const accepted = await sendOffer(
-      rider.telegramChatId, order.id, rider, order, sendTelegramMessage
-    );
-
-    if (!accepted) {
-      await sendTelegramMessage(
-        rider.telegramChatId,
-        `⏰ Order #${order.invoiceNumber} অন্য rider কে দেওয়া হয়েছে।`
-      );
-      continue;
-    }
-
-    // ✅ Assign করো
-    await prisma.order.update({
-      where: { id: order.id },
-      data: { deliveryManId: rider.id, assignedAt: new Date() },
-    });
-
-    const bdTime = new Date(Date.now() + 6 * 60 * 60 * 1000)
-      .toISOString().replace("T", " ").slice(0, 16);
-
-    await sendTelegramMessage(
-      rider.telegramChatId,
-`✅ <b>Order Confirmed!</b>
-
-📋 <b>Invoice:</b> #${order.invoiceNumber}
-👤 <b>Customer:</b> ${order.customerName}
-📞 <b>Phone:</b> <a href="tel:${order.customerPhone}">${order.customerPhone}</a>
-📍 <b>Address:</b> ${order.customerAddress}, ${order.customerCity}
-📏 <b>Distance:</b> ${rider.distance.toFixed(2)} km
-⏰ <b>Assigned:</b> ${bdTime} (BD Time)
-
-👉 <a href="https://admin.i-mall.com.bd/delivery">Dashboard এ যান</a>`
-    );
-
-    return rider;
-  }
-
-  await notifyAdmin(order, sendTelegramMessage);
-  return null;
-}
-
-async function notifyAdmin(order, sendTelegramMessage) {
-  const ADMIN_ID = process.env.ADMIN_TELEGRAM_CHAT_ID;
-  if (!ADMIN_ID) return;
-  await sendTelegramMessage(ADMIN_ID,
-`⚠️ <b>কোনো Rider পাওয়া যায়নি!</b>
-📋 Invoice #${order.invoiceNumber}
-👤 ${order.customerName} — ${order.customerPhone}
-📍 ${order.customerAddress}, ${order.customerCity}
-👉 Manual assign করুন।`
-  );
-}
 
 // ✅ Assign delivery man — assignedAt set করো
 
