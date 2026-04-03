@@ -25,19 +25,6 @@ function sendOffer(telegramChatId, orderId, rider, order, sendTelegramMessage) {
   return new Promise((resolve) => {
     const TIMEOUT_SEC = 45;
 
-    // ✅ Product list তৈরি করো
-    const itemList = order.orderItems
-      ?.map(i => {
-        const brand = i.brandName ? `${i.brandName} — ` : "";
-        const size = i.size ? ` (${i.size})` : "";
-        return `  • ${brand}${i.name}${size} ×${i.quantity} = ৳${i.totalPrice}`;
-      })
-      .join("\n") || "—";
-
-    const deliveryCharge =
-      order.deliveryChargeInside ?? order.deliveryChargeOutside ?? 0;
-    const platformCharge = order.platformCharge ?? 0;
-
     sendTelegramMessage(
       telegramChatId,
 `🛵 <b>নতুন Order Offer!</b>
@@ -49,10 +36,10 @@ function sendOffer(telegramChatId, orderId, rider, order, sendTelegramMessage) {
 📏 <b>Distance:</b> ${rider.distance.toFixed(2)} km
 
 🛍️ <b>Products:</b>
-${itemList}
+${order.orderItems?.map(i => `  • ${i.brandName ? i.brandName + " — " : ""}${i.name}${i.size ? ` (${i.size})` : ""} ×${i.quantity} = ৳${i.totalPrice}`).join("\n") || "—"}
 
-🚚 <b>Delivery Charge:</b> ৳${deliveryCharge}
-⚙️ <b>Platform Charge:</b> ৳${platformCharge}
+🚚 <b>Delivery Charge:</b> ৳${order.deliveryChargeInside ?? order.deliveryChargeOutside ?? 0}
+⚙️ <b>Platform Charge:</b> ৳${order.platformCharge ?? 0}
 💰 <b>Total:</b> ৳${order.subtotal}
 💳 <b>Payment:</b> ${order.paymentMethod || "COD"}
 
@@ -99,10 +86,9 @@ export async function autoAssignRider(prisma, order, sendTelegramMessage) {
       RiderLocation: {
         select: { lat: true, lng: true, isOnline: true },
       },
-      // ✅ orders → order (singular)
       order: {
         where: {
-          status: { notIn: ["PENDING","SHIPPED","DELIVERED", "RETURNED","CANCELED"] },
+          status: { notIn: ["DELIVERED", "CANCELED"] },
           isDeleted: false,
         },
         select: { id: true },
@@ -116,7 +102,6 @@ export async function autoAssignRider(prisma, order, sendTelegramMessage) {
     console.log(`  - ${r.name} | online: ${r.RiderLocation?.isOnline} | activeOrders: ${r.order.length} | telegramId: ${r.telegramChatId}`);
   });
 
-  // ✅ orders → order (singular)
   const sorted = allRiders
     .filter((r) => r.RiderLocation?.isOnline && r.order.length === 0)
     .map((r) => ({
@@ -144,25 +129,50 @@ export async function autoAssignRider(prisma, order, sendTelegramMessage) {
       continue;
     }
 
+    // ✅ Race condition check
     const activeNow = await prisma.order.count({
       where: {
         deliveryManId: rider.id,
-        status: { notIn: ["PENDING","SHIPPED","DELIVERED", "RETURNED","CANCELED"] },
+        status: { notIn: ["DELIVERED", "CANCELED"] },
         isDeleted: false,
       },
     });
 
     if (activeNow > 0) {
-      console.log(`⚠️ ${rider.name} এর মধ্যে busy হয়ে গেছে — skip`);
+      console.log(`⚠️ ${rider.name} busy — skip`);
       continue;
     }
 
+    // ✅ Order এখনো unassigned কিনা check করো
+    const freshOrder = await prisma.order.findUnique({
+      where: { id: order.id },
+      select: { deliveryManId: true },
+    });
+
+    if (freshOrder?.deliveryManId) {
+      console.log(`✅ Order ইতিমধ্যে assign হয়ে গেছে — stop`);
+      return null;
+    }
+
+    // ✅ Offer পাঠাও — assign হবে webhook এ
     const accepted = await sendOffer(
       rider.telegramChatId, order.id, rider, order, sendTelegramMessage
     );
 
     if (!accepted) {
-      console.log(`❌ ${rider.name} reject/timeout করেছে`);
+      console.log(`❌ ${rider.name} reject/timeout`);
+
+      // ✅ Timeout এর পরেও webhook এ assign হয়েছে কিনা check করো
+      const checkOrder = await prisma.order.findUnique({
+        where: { id: order.id },
+        select: { deliveryManId: true },
+      });
+
+      if (checkOrder?.deliveryManId) {
+        console.log(`✅ Webhook এ assign হয়ে গেছে — stop`);
+        return null;
+      }
+
       await sendTelegramMessage(
         rider.telegramChatId,
         `⏰ Order #${order.invoiceNumber} অন্য rider কে দেওয়া হয়েছে।`
@@ -170,34 +180,22 @@ export async function autoAssignRider(prisma, order, sendTelegramMessage) {
       continue;
     }
 
-    console.log(`✅ ${rider.name} accept করেছে — assign হচ্ছে`);
-
-    await prisma.order.update({
-      where: { id: order.id },
-      data: { deliveryManId: rider.id, assignedAt: new Date() },
-    });
-
-    const bdTime = new Date(Date.now() + 6 * 60 * 60 * 1000)
-      .toISOString().replace("T", " ").slice(0, 16);
-
-    await sendTelegramMessage(
-      rider.telegramChatId,
-`✅ <b>Order Confirmed!</b>
-
-📋 <b>Invoice:</b> #${order.invoiceNumber}
-👤 <b>Customer:</b> ${order.customerName}
-📞 <b>Phone:</b> <a href="tel:${order.customerPhone}">${order.customerPhone}</a>
-📍 <b>Address:</b> ${order.customerAddress}, ${order.customerCity}
-📏 <b>Distance:</b> ${rider.distance.toFixed(2)} km
-⏰ <b>Assigned:</b> ${bdTime} (BD Time)
-
-👉 <a href="https://admin.i-mall.com.bd/delivery">Dashboard এ যান</a>`
-    );
-
+    // ✅ accepted = true মানে webhook এ assign হয়ে গেছে
+    console.log(`✅ ${rider.name} accept করেছে`);
     return rider;
   }
 
-  await notifyAdmin(order, sendTelegramMessage);
+  // ✅ সবাই reject/timeout — assign হয়েছে কিনা final check
+  const finalCheck = await prisma.order.findUnique({
+    where: { id: order.id },
+    select: { deliveryManId: true },
+  });
+
+  if (!finalCheck?.deliveryManId) {
+    console.log("⚠️ সবাই reject করেছে — admin notify");
+    await notifyAdmin(order, sendTelegramMessage);
+  }
+
   return null;
 }
 
