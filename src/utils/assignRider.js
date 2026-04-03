@@ -25,6 +25,19 @@ function sendOffer(telegramChatId, orderId, rider, order, sendTelegramMessage) {
   return new Promise((resolve) => {
     const TIMEOUT_SEC = 45;
 
+    // ✅ Product list তৈরি করো
+    const itemList = order.orderItems
+      ?.map(i => {
+        const brand = i.brandName ? `${i.brandName} — ` : "";
+        const size = i.size ? ` (${i.size})` : "";
+        return `  • ${brand}${i.name}${size} ×${i.quantity} = ৳${i.totalPrice}`;
+      })
+      .join("\n") || "—";
+
+    const deliveryCharge =
+      order.deliveryChargeInside ?? order.deliveryChargeOutside ?? 0;
+    const platformCharge = order.platformCharge ?? 0;
+
     sendTelegramMessage(
       telegramChatId,
 `🛵 <b>নতুন Order Offer!</b>
@@ -34,6 +47,15 @@ function sendOffer(telegramChatId, orderId, rider, order, sendTelegramMessage) {
 📞 <b>Phone:</b> ${order.customerPhone}
 📍 <b>Address:</b> ${order.customerAddress}, ${order.customerCity}
 📏 <b>Distance:</b> ${rider.distance.toFixed(2)} km
+
+🛍️ <b>Products:</b>
+${itemList}
+
+🚚 <b>Delivery Charge:</b> ৳${deliveryCharge}
+⚙️ <b>Platform Charge:</b> ৳${platformCharge}
+💰 <b>Total:</b> ৳${order.subtotal}
+💳 <b>Payment:</b> ${order.paymentMethod || "COD"}
+
 ⏰ <b>${TIMEOUT_SEC} সেকেন্ডের মধ্যে Accept করুন!</b>`,
       {
         reply_markup: {
