@@ -21,13 +21,15 @@ import {
   updateOrderStatusByDeliveryMan,
   getRevenueAnalysis ,
   updateRiderLocationAndStatus,
-  getRiderStatus
+  getRiderStatus,
+  getDeliveryCharge
 } from "../../controllers/order/order.js";
 import verify from "../../utils/verifyToken.js";
 
 const router = express.Router();
-
 // ================== Order Routes ==================
+router.post("/v1/delivery-charge", getDeliveryCharge);
+
 router.post("/v1/orders", createOrder);
 router.post("/v1/orders-init", createOrderSsl);
 router.post("/v1/orders-success", createOrderSuccess);

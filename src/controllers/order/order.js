@@ -16,6 +16,7 @@ import striptags from "striptags";
 import nodemailer from "nodemailer";
 import sendTelegramMessage from "../../utils/Sendtelegram.js";
 import { autoAssignRider } from "../../utils/assignRider.js";
+import { calculateDeliveryCharge } from "../../utils/Deliverycharge.js";
 
 
 
@@ -892,6 +893,48 @@ const generateInvoiceNumber = async (tx, brandID, productCode) => {
 //   }
 // };
 
+/**
+ * createOrder.js
+ * ──────────────
+ * আপনার existing createOrder — delivery charge auto-calculate যোগ করা হয়েছে।
+ *
+ * পরিবর্তন কী হয়েছে:
+ *   1. deliveryChargeInside / Outside frontend থেকে আর পাঠাতে হবে না
+ *   2. customerLat + customerLng দিয়ে ORS → charge auto বের হয়
+ *   3. বাকি সব আগের মতোই আছে
+ */
+
+
+
+// ✅ Shop location — AQP Mall, Bailey Road, Dhaka
+const SHOP_LAT = 23.7276;
+const SHOP_LNG = 90.4174;
+
+export const getDeliveryCharge = async (req, res) => {
+  const { customerLat, customerLng } = req.body;
+ 
+  if (!customerLat || !customerLng) {
+    return res.json({ charge: 30, distanceKm: 0, eta: null });
+  }
+ 
+  const route = await getRouteETA(
+    SHOP_LAT,
+    SHOP_LNG,
+    parseFloat(customerLat),
+    parseFloat(customerLng)
+  );
+ 
+  const distanceKm = route?.distanceKm ?? 0;
+  const charge     = calculateDeliveryCharge(distanceKm);
+ 
+  return res.json({
+    charge,
+    distanceKm,
+    eta: route?.label ?? null,
+    minutes: route?.minutes ?? null,
+  });
+};
+
 export const createOrder = async (req, res) => {
   try {
     const {
@@ -905,10 +948,7 @@ export const createOrder = async (req, res) => {
       customerCity,
       customerPostalCode,
       paymentMethod,
-      deliveryChargeInside,
-      deliveryChargeOutside,
       platformCharge,
-      // ✅ Customer map pin location
       customerLat,
       customerLng,
       orderItems,
@@ -924,8 +964,31 @@ export const createOrder = async (req, res) => {
     }
 
     if (!orderItems || orderItems.length === 0) {
-      return res.status(400).json(jsonResponse(false, "Please select at least 1 item", null));
+      return res
+        .status(400)
+        .json(jsonResponse(false, "Please select at least 1 item", null));
     }
+
+    // ✅ Delivery charge — ORS road distance দিয়ে auto calculate
+    let deliveryCharge = 30; // fallback যদি location না পাওয়া যায়
+    let deliveryDistanceKm = 0;
+
+    if (customerLat && customerLng) {
+      const route = await getRouteETA(
+        SHOP_LAT,
+        SHOP_LNG,
+        parseFloat(customerLat),
+        parseFloat(customerLng)
+      );
+      if (route?.distanceKm) {
+        deliveryDistanceKm = route.distanceKm;
+        deliveryCharge     = calculateDeliveryCharge(route.distanceKm);
+      }
+    }
+
+    // ─────────────────────────────────────────────
+    // বাকি সব আগের মতো — শুধু deliveryCharge replace
+    // ─────────────────────────────────────────────
 
     const firstItem = orderItems?.[0];
 
@@ -935,7 +998,9 @@ export const createOrder = async (req, res) => {
     });
 
     if (!productInfo) {
-      return res.status(400).json(jsonResponse(false, "Product not found", null));
+      return res
+        .status(400)
+        .json(jsonResponse(false, "Product not found", null));
     }
 
     const invoiceNumber = await generateInvoiceNumber(
@@ -945,9 +1010,9 @@ export const createOrder = async (req, res) => {
     );
 
     const newOrder = await prisma.$transaction(async (tx) => {
-      let totalItems = 0;
-      let subtotal = 0;
-      let subtotalCost = 0;
+      let totalItems    = 0;
+      let subtotal      = 0;
+      let subtotalCost  = 0;
       let newOrderItems = [];
 
       for (const item of orderItems) {
@@ -964,30 +1029,30 @@ export const createOrder = async (req, res) => {
           throw new Error("Product or attribute does not exist");
         }
 
-        const totalPrice = item.quantity * productAttribute.discountedRetailPrice;
+        const totalPrice     = item.quantity * productAttribute.discountedRetailPrice;
         const totalCostPrice = item.quantity * productAttribute.costPrice;
 
         newOrderItems.push({
-          productId: item.productId,
-          productCode: product.productCode || null,
-          barcode: product.barcode || null,
-          brandId: product.brandId || null,
-          brandName: product.brand?.name || null,
-          productAttributeId: item.productAttributeId,
-          name: product.name,
-          size: productAttribute.size,
-          costPrice: productAttribute.costPrice,
-          retailPrice: productAttribute.retailPrice,
-          discountPercent: productAttribute.discountPercent,
-          discountPrice: productAttribute.discountPrice,
+          productId:            item.productId,
+          productCode:          product.productCode || null,
+          barcode:              product.barcode || null,
+          brandId:              product.brandId || null,
+          brandName:            product.brand?.name || null,
+          productAttributeId:   item.productAttributeId,
+          name:                 product.name,
+          size:                 productAttribute.size,
+          costPrice:            productAttribute.costPrice,
+          retailPrice:          productAttribute.retailPrice,
+          discountPercent:      productAttribute.discountPercent,
+          discountPrice:        productAttribute.discountPrice,
           discountedRetailPrice: productAttribute.discountedRetailPrice,
           totalCostPrice,
           totalPrice,
-          quantity: item.quantity,
+          quantity:             item.quantity,
         });
 
-        totalItems += item.quantity;
-        subtotal += totalPrice;
+        totalItems   += item.quantity;
+        subtotal     += totalPrice;
         subtotalCost += totalCostPrice;
       }
 
@@ -995,11 +1060,13 @@ export const createOrder = async (req, res) => {
         ? await tx.coupon.findFirst({ where: { id: couponId, isActive: true } })
         : null;
 
-      const deliveryCharge = deliveryChargeInside ?? deliveryChargeOutside ?? 0;
       const safePlatformCharge = Number(platformCharge) || 0;
 
       const finalSubtotal =
-        subtotal + deliveryCharge + safePlatformCharge - (coupon?.discountAmount ?? 0);
+        subtotal +
+        deliveryCharge +
+        safePlatformCharge -
+        (coupon?.discountAmount ?? 0);
 
       const order = await tx.order.create({
         data: {
@@ -1012,17 +1079,17 @@ export const createOrder = async (req, res) => {
           customerEmail,
           customerCity,
           customerPostalCode,
-          // ✅ Save customer map pin location
-          customerLat: customerLat ? parseFloat(customerLat) : null,
-          customerLng: customerLng ? parseFloat(customerLng) : null,
+          customerLat:  customerLat ? parseFloat(customerLat) : null,
+          customerLng:  customerLng ? parseFloat(customerLng) : null,
           invoiceNumber,
           totalItems,
           subtotalCost,
           subtotal: finalSubtotal,
           paymentMethod,
-          deliveryChargeInside: deliveryChargeInside ?? null,
-          deliveryChargeOutside: deliveryChargeOutside ?? null,
-          platformCharge: safePlatformCharge,
+          // ✅ auto calculated charge — inside হিসেবে save হচ্ছে
+          deliveryChargeInside:  deliveryCharge,
+          deliveryChargeOutside: null,
+          platformCharge:        safePlatformCharge,
           orderItems: { create: newOrderItems },
         },
         include: { orderItems: true },
@@ -1038,17 +1105,17 @@ export const createOrder = async (req, res) => {
       return order;
     });
 
-    const orderTime = new Date();
+    // ─── Email ───────────────────────────────────────────────────────────────
+
+    const orderTime        = new Date();
     const estimatedDelivery = new Date(orderTime.getTime() + 40 * 60 * 1000);
 
-    const formatTime = (date) => {
-      return date.toLocaleTimeString("en-BD", {
+    const formatTime = (date) =>
+      date.toLocaleTimeString("en-BD", {
         hour: "2-digit", minute: "2-digit", hour12: true, timeZone: "Asia/Dhaka",
       });
-    };
 
-    const deliveryCharge = deliveryChargeInside ?? deliveryChargeOutside ?? 0;
-    const deliveryLabel = deliveryChargeInside != null ? "Inside Dhaka" : "Outside Dhaka";
+    const deliveryLabel = `Inside Dhaka (${deliveryDistanceKm} km)`;
 
     const emailBody = `
 <!DOCTYPE html>
@@ -1088,13 +1155,17 @@ export const createOrder = async (req, res) => {
                 </tr>
               </thead>
               <tbody>
-                ${newOrder.orderItems.map((item, index) => `
+                ${newOrder.orderItems
+                  .map(
+                    (item, index) => `
                   <tr style="background:${index % 2 === 0 ? "#ffffff" : "#fdf6f0"};">
                     <td style="padding:10px 14px;color:#333;">${item.name}</td>
                     <td style="padding:10px 14px;color:#555;text-align:center;">${item.size || "—"}</td>
                     <td style="padding:10px 14px;color:#555;text-align:center;">${item.quantity}</td>
                     <td style="padding:10px 14px;color:#c8773a;font-weight:600;text-align:right;">${item.discountedRetailPrice} TK</td>
-                  </tr>`).join("")}
+                  </tr>`
+                  )
+                  .join("")}
               </tbody>
             </table>
             <p style="font-size:13px;font-weight:700;color:#c8773a;text-transform:uppercase;letter-spacing:1px;margin:0 0 10px;">Order Summary</p>
@@ -1151,22 +1222,28 @@ export const createOrder = async (req, res) => {
 </html>`;
 
     if (customerEmail) {
-      await sendEmail(customerEmail, `Order Placed from I-Mall — Invoice #${invoiceNumber}`, emailBody);
+      await sendEmail(
+        customerEmail,
+        `Order Placed from I-Mall — Invoice #${invoiceNumber}`,
+        emailBody
+      );
     }
-    await sendEmail("shamimrocky801@yahoo.com", `New Order Received — Invoice #${invoiceNumber}`, emailBody);
+    await sendEmail(
+      "shamimrocky801@yahoo.com",
+      `New Order Received — Invoice #${invoiceNumber}`,
+      emailBody
+    );
 
-    // newOrder create হওয়ার পরে, return এর আগে:
-     autoAssignRider(prisma, newOrder, sendTelegramMessage).catch(console.error);
+    autoAssignRider(prisma, newOrder, sendTelegramMessage).catch(console.error);
 
-    return res.status(200).json(jsonResponse(true, "Your order has been placed successfully", newOrder));
-
+    return res
+      .status(200)
+      .json(jsonResponse(true, "Your order has been placed successfully", newOrder));
   } catch (error) {
     console.log(error);
     return res.status(500).json(jsonResponse(false, error.message || error, null));
   }
 };
-
-
 
 
 
@@ -2190,35 +2267,33 @@ const geocodeAddress = async (order) => {
   return null;
 };
 
-// ✅ OpenRouteService — actual road distance + duration
 const getRouteETA = async (fromLat, fromLng, toLat, toLng) => {
   try {
-    const key = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjRiNWRlMGU0Y2UxYjRjMzliNDNjNmM3ZmRjYmNkOTE2IiwiaCI6Im11cm11cjY0In0=";
-    console.log("ORS KEY exists:", !!key);
-
-    const url = `https://api.openrouteservice.org/v2/directions/driving-car?api_key=${key}&start=${fromLng},${fromLat}&end=${toLng},${toLat}`;
+    const url =
+      `https://api.openrouteservice.org/v2/directions/driving-car` +
+      `?api_key=${ORS_API_KEY}` +
+      `&start=${fromLng},${fromLat}` +
+      `&end=${toLng},${toLat}`;
+ 
     const res  = await fetch(url);
     const data = await res.json();
-
-    console.log("ORS response:", JSON.stringify(data?.features?.[0]?.properties?.summary));
-
+ 
     const summary = data?.features?.[0]?.properties?.summary;
     if (!summary) return null;
-
+ 
     const distanceKm  = Math.round((summary.distance / 1000) * 10) / 10;
     const durationMin = Math.round(summary.duration / 60);
-
-    return {
-      distanceKm,
-      minutes: durationMin,
-      label: distanceKm < 0.3
+ 
+    const label =
+      distanceKm < 0.3
         ? "প্রায় এসে গেছে! 🎉"
         : durationMin < 1
           ? "প্রায় এসে গেছে!"
           : durationMin < 60
             ? `প্রায় ${durationMin} মিনিট`
-            : `প্রায় ${Math.floor(durationMin / 60)} ঘণ্টা ${durationMin % 60} মিনিট`,
-    };
+            : `প্রায় ${Math.floor(durationMin / 60)} ঘণ্টা ${durationMin % 60} মিনিট`;
+ 
+    return { distanceKm, minutes: durationMin, label };
   } catch (err) {
     console.error("ORS Error:", err.message);
     return null;
