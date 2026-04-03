@@ -2227,8 +2227,6 @@ const getRouteETA = async (fromLat, fromLng, toLat, toLng) => {
 
 // ✅ 1. Rider Online/Offline toggle + location update
 // Rider dashboard থেকে প্রতি 10s এ call হবে
-
-
 export const updateRiderLocationAndStatus = async (req, res) => {
   try {
     const riderId = req.user.id;
@@ -2237,8 +2235,8 @@ export const updateRiderLocationAndStatus = async (req, res) => {
     await prisma.riderLocation.upsert({
       where: { deliveryManId: riderId },
       update: {
-        ...(lat !== undefined && { lat: parseFloat(lat) }),
-        ...(lng !== undefined && { lng: parseFloat(lng) }),
+        ...(lat && { lat: parseFloat(lat) }),
+        ...(lng && { lng: parseFloat(lng) }),
         ...(isOnline !== undefined && { isOnline }),
         updatedAt: new Date(),
       },
@@ -2250,51 +2248,34 @@ export const updateRiderLocationAndStatus = async (req, res) => {
       },
     });
 
-    // ✅ Rider online হলে — unassigned pending orders check করো
-    if (isOnline === true) {
-      const unassignedOrders = await prisma.order.findMany({
-        where: {
-          deliveryManId: null,         // কোনো rider assign হয়নি
-          status: "PENDING",
-          isDeleted: false,
-          customerLat: { not: null },  // location আছে
-          customerLng: { not: null },
-        },
-        include: { orderItems: true },
-        orderBy: { createdAt: "asc" }, // পুরনো order আগে
-      });
-
-      if (unassignedOrders.length > 0) {
-        console.log(`🔄 ${unassignedOrders.length}টি unassigned order পাওয়া গেছে — assign করার চেষ্টা করছি`);
-
-        // ✅ একে একে assign করার চেষ্টা করো (background এ)
-        (async () => {
-          for (const order of unassignedOrders) {
-            await autoAssignRider(prisma, order, sendTelegramMessage);
-          }
-        })().catch(console.error);
-      }
-    }
-
     return res.status(200).json(jsonResponse(true, "Updated", null));
   } catch (error) {
-    console.error(error);
     return res.status(500).json(jsonResponse(false, error.message, null));
   }
 };
-
-
 
 // ✅ 2. Rider এর current status (dashboard load এ call হবে)
 export const getRiderStatus = async (req, res) => {
   try {
     const riderId = req.user.id;
-    const location = await prisma.riderLocation.findUnique({
-      where: { deliveryManId: riderId },
-      select: { isOnline: true, lat: true, lng: true },
-    });
+
+    const [riderLocation, activeOrder] = await Promise.all([
+      prisma.riderLocation.findUnique({
+        where: { deliveryManId: riderId },
+      }),
+      prisma.order.findFirst({
+        where: {
+          deliveryManId: riderId,
+          status: { notIn: ["DELIVERED", "CANCELLED"] },
+          isDeleted: false,
+        },
+        include: { orderItems: true },
+      }),
+    ]);
+
     return res.status(200).json(jsonResponse(true, "Rider status", {
-      isOnline: location?.isOnline ?? false,
+      isOnline: riderLocation?.isOnline ?? false,
+      activeOrder: activeOrder ?? null,
     }));
   } catch (error) {
     return res.status(500).json(jsonResponse(false, error.message, null));
