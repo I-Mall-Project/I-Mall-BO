@@ -2289,24 +2289,12 @@ export const updateRiderLocationAndStatus = async (req, res) => {
 export const getRiderStatus = async (req, res) => {
   try {
     const riderId = req.user.id;
-
-    const [riderLocation, activeOrder] = await Promise.all([
-      prisma.riderLocation.findUnique({
-        where: { deliveryManId: riderId },
-      }),
-      prisma.order.findFirst({
-        where: {
-          deliveryManId: riderId,
-          status: { notIn: ["DELIVERED", "CANCELLED"] },
-          isDeleted: false,
-        },
-        include: { orderItems: true },
-      }),
-    ]);
-
+    const location = await prisma.riderLocation.findUnique({
+      where: { deliveryManId: riderId },
+      select: { isOnline: true, lat: true, lng: true },
+    });
     return res.status(200).json(jsonResponse(true, "Rider status", {
-      isOnline: riderLocation?.isOnline ?? false,
-      activeOrder: activeOrder ?? null,
+      isOnline: location?.isOnline ?? false,
     }));
   } catch (error) {
     return res.status(500).json(jsonResponse(false, error.message, null));
