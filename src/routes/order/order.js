@@ -23,7 +23,7 @@ import {
   updateRiderLocationAndStatus,
   getRiderStatus,
   getDeliveryCharge,
-  generateInvoiceNumber
+  getInvoiceData
 } from "../../controllers/order/order.js";
 import verify from "../../utils/verifyToken.js";
 
@@ -35,7 +35,7 @@ router.post("/v1/orders", createOrder);
 router.post("/v1/orders-init", createOrderSsl);
 router.post("/v1/orders-success", createOrderSuccess);
 router.post("/v1/orders-fail", createOrderFail);
-router.get("/v1/orders/invoice/:orderId", generateInvoiceNumber);
+router.get("/v1/orders/invoice/:orderId", getInvoiceData);
 router.get("/v1/orders/latest", getLatestOrder);
 router.get("/v1/orders/month-wise/:year", verify, getMonthlyOrderCountYearWise);
 

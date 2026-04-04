@@ -58,7 +58,7 @@ const sendEmail = async (to, subject, html) => {
 };
 
 
-export const generateInvoiceNumber = async (req,res) => {
+export const getInvoiceData  = async (req,res) => {
 
   const { orderId } = req.params;
  
