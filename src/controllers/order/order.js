@@ -102,15 +102,16 @@ export const getDeliveryCharge = async (req, res) => {
   }
  
   // ✅ Brand এর location DB থেকে নাও
-  const brand = brandId
-    ? await prisma.brand.findFirst({
-        where: { id: brandId },
-        select: { lat: true, lng: true },
+  // ✅ productId দিয়ে brand এর lat/lng বের করো
+  const product = productId
+    ? await prisma.product.findFirst({
+        where: { id: productId },
+        include: { brand: { select: { lat: true, lng: true } } },
       })
     : null;
- 
-  const SHOP_LAT = brand?.lat ?? null;
-  const SHOP_LNG = brand?.lng ?? null;
+
+  const SHOP_LAT = product?.brand?.lat ?? null;
+  const SHOP_LNG = product?.brand?.lng ?? null;
 
     console.log("📍 SHOP_LAT:", SHOP_LAT, "SHOP_LNG:", SHOP_LNG);
 
