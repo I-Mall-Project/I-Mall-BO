@@ -91,9 +91,9 @@ const generateInvoiceNumber = async (tx, brandID, productCode) => {
 
 
 export const getDeliveryCharge = async (req, res) => {
-  const { customerLat, customerLng,brandId  } = req.body;
+  const { customerLat, customerLng,productId  } = req.body;
 
-    console.log("📦 delivery-charge hit:", { customerLat, customerLng, brandId });
+    console.log("📦 delivery-charge hit:", { customerLat, customerLng, productId });
 
  
  
