@@ -913,7 +913,24 @@ const SHOP_LNG = 90.4174;
 export const getDeliveryCharge = async (req, res) => {
   const { customerLat, customerLng } = req.body;
  
+ 
   if (!customerLat || !customerLng) {
+    return res.json({ charge: 30, distanceKm: 0, eta: null });
+  }
+ 
+  // ✅ Brand এর location DB থেকে নাও
+  const brand = brandId
+    ? await prisma.brand.findFirst({
+        where: { id: brandId },
+        select: { lat: true, lng: true },
+      })
+    : null;
+ 
+  const SHOP_LAT = brand?.lat ?? null;
+  const SHOP_LNG = brand?.lng ?? null;
+ 
+  // Brand location না থাকলে default charge return করো
+  if (!SHOP_LAT || !SHOP_LNG) {
     return res.json({ charge: 30, distanceKm: 0, eta: null });
   }
  
@@ -930,10 +947,24 @@ export const getDeliveryCharge = async (req, res) => {
   return res.json({
     charge,
     distanceKm,
-    eta: route?.label ?? null,
+    eta:     route?.label   ?? null,
     minutes: route?.minutes ?? null,
   });
 };
+
+/**
+ * createOrder.js
+ * --------------
+ * Brand DB থেকে shop location নিয়ে delivery charge auto-calculate করা হয়।
+ *
+ * পরিবর্তন কী হয়েছে:
+ *   1. deliveryChargeInside / Outside frontend থেকে আর পাঠাতে হবে না
+ *   2. product এর brand.lat / brand.lng দিয়ে ORS road distance বের হয়
+ *   3. calculateDeliveryCharge(km) দিয়ে charge বসে
+ *   4. বাকি সব আগের মতোই আছে
+ */
+
+
 
 export const createOrder = async (req, res) => {
   try {
@@ -969,27 +1000,9 @@ export const createOrder = async (req, res) => {
         .json(jsonResponse(false, "Please select at least 1 item", null));
     }
 
-    // ✅ Delivery charge — ORS road distance দিয়ে auto calculate
-    let deliveryCharge = 30; // fallback যদি location না পাওয়া যায়
-    let deliveryDistanceKm = 0;
-
-    if (customerLat && customerLng) {
-      const route = await getRouteETA(
-        SHOP_LAT,
-        SHOP_LNG,
-        parseFloat(customerLat),
-        parseFloat(customerLng)
-      );
-      if (route?.distanceKm) {
-        deliveryDistanceKm = route.distanceKm;
-        deliveryCharge     = calculateDeliveryCharge(route.distanceKm);
-      }
-    }
-
-    // ─────────────────────────────────────────────
-    // বাকি সব আগের মতো — শুধু deliveryCharge replace
-    // ─────────────────────────────────────────────
-
+    // ----------------------------------------------------------------
+    // 1. Product info + Brand location DB থেকে নাও
+    // ----------------------------------------------------------------
     const firstItem = orderItems?.[0];
 
     const productInfo = await prisma.product.findFirst({
@@ -1003,12 +1016,40 @@ export const createOrder = async (req, res) => {
         .json(jsonResponse(false, "Product not found", null));
     }
 
+    // ----------------------------------------------------------------
+    // 2. Delivery charge — brand DB location থেকে customer পর্যন্ত
+    // ----------------------------------------------------------------
+    const SHOP_LAT = productInfo?.brand?.lat ?? null;
+    const SHOP_LNG = productInfo?.brand?.lng ?? null;
+
+    let deliveryCharge     = 30; // fallback যদি brand location না থাকে
+    let deliveryDistanceKm = 0;
+
+    if (customerLat && customerLng && SHOP_LAT && SHOP_LNG) {
+      const route = await getRouteETA(
+        SHOP_LAT,
+        SHOP_LNG,
+        parseFloat(customerLat),
+        parseFloat(customerLng)
+      );
+      if (route?.distanceKm) {
+        deliveryDistanceKm = route.distanceKm;
+        deliveryCharge     = calculateDeliveryCharge(route.distanceKm);
+      }
+    }
+
+    // ----------------------------------------------------------------
+    // 3. Invoice number
+    // ----------------------------------------------------------------
     const invoiceNumber = await generateInvoiceNumber(
       prisma,
       productInfo.brand?.brandID || "00",
       productInfo.productCode || "0000"
     );
 
+    // ----------------------------------------------------------------
+    // 4. Transaction — order create
+    // ----------------------------------------------------------------
     const newOrder = await prisma.$transaction(async (tx) => {
       let totalItems    = 0;
       let subtotal      = 0;
@@ -1033,22 +1074,22 @@ export const createOrder = async (req, res) => {
         const totalCostPrice = item.quantity * productAttribute.costPrice;
 
         newOrderItems.push({
-          productId:            item.productId,
-          productCode:          product.productCode || null,
-          barcode:              product.barcode || null,
-          brandId:              product.brandId || null,
-          brandName:            product.brand?.name || null,
-          productAttributeId:   item.productAttributeId,
-          name:                 product.name,
-          size:                 productAttribute.size,
-          costPrice:            productAttribute.costPrice,
-          retailPrice:          productAttribute.retailPrice,
-          discountPercent:      productAttribute.discountPercent,
-          discountPrice:        productAttribute.discountPrice,
+          productId:             item.productId,
+          productCode:           product.productCode || null,
+          barcode:               product.barcode || null,
+          brandId:               product.brandId || null,
+          brandName:             product.brand?.name || null,
+          productAttributeId:    item.productAttributeId,
+          name:                  product.name,
+          size:                  productAttribute.size,
+          costPrice:             productAttribute.costPrice,
+          retailPrice:           productAttribute.retailPrice,
+          discountPercent:       productAttribute.discountPercent,
+          discountPrice:         productAttribute.discountPrice,
           discountedRetailPrice: productAttribute.discountedRetailPrice,
           totalCostPrice,
           totalPrice,
-          quantity:             item.quantity,
+          quantity:              item.quantity,
         });
 
         totalItems   += item.quantity;
@@ -1086,7 +1127,6 @@ export const createOrder = async (req, res) => {
           subtotalCost,
           subtotal: finalSubtotal,
           paymentMethod,
-          // ✅ auto calculated charge — inside হিসেবে save হচ্ছে
           deliveryChargeInside:  deliveryCharge,
           deliveryChargeOutside: null,
           platformCharge:        safePlatformCharge,
@@ -1105,9 +1145,10 @@ export const createOrder = async (req, res) => {
       return order;
     });
 
-    // ─── Email ───────────────────────────────────────────────────────────────
-
-    const orderTime        = new Date();
+    // ----------------------------------------------------------------
+    // 5. Email
+    // ----------------------------------------------------------------
+    const orderTime         = new Date();
     const estimatedDelivery = new Date(orderTime.getTime() + 40 * 60 * 1000);
 
     const formatTime = (date) =>
@@ -1239,13 +1280,12 @@ export const createOrder = async (req, res) => {
     return res
       .status(200)
       .json(jsonResponse(true, "Your order has been placed successfully", newOrder));
+
   } catch (error) {
     console.log(error);
     return res.status(500).json(jsonResponse(false, error.message || error, null));
   }
 };
-
-
 
 
 //create order ssl
@@ -2270,7 +2310,6 @@ const geocodeAddress = async (order) => {
 const ORS_API_KEY =
   "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjRiNWRlMGU0Y2UxYjRjMzliNDNjNmM3ZmRjYmNkOTE2IiwiaCI6Im11cm11cjY0In0=";
  
-
 const getRouteETA = async (fromLat, fromLng, toLat, toLng) => {
   try {
     const url =
