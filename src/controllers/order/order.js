@@ -911,7 +911,7 @@ const SHOP_LAT = 23.7276;
 const SHOP_LNG = 90.4174;
 
 export const getDeliveryCharge = async (req, res) => {
-  const { customerLat, customerLng } = req.body;
+  const { customerLat, customerLng,brandId  } = req.body;
  
  
   if (!customerLat || !customerLng) {
