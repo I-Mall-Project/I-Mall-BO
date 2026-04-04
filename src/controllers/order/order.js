@@ -58,35 +58,63 @@ const sendEmail = async (to, subject, html) => {
 };
 
 
-const generateInvoiceNumber = async (tx, brandID, productCode) => {
+export const generateInvoiceNumber = async (req,res) => {
 
-  const now = new Date();
-
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-
-  const prefix = `${year}${month}${day}${brandID}${productCode}`;
-
-  const lastOrder = await tx.order.findFirst({
-    where: {
-      invoiceNumber: {
-        startsWith: prefix
-      }
-    },
-    orderBy: {
-      createdAt: "desc"
+  const { orderId } = req.params;
+ 
+  try {
+    const order = await prisma.order.findFirst({
+      where: { id: orderId },
+      include: {
+        orderItems: true,
+        coupon:     true,
+      },
+    });
+ 
+    if (!order) {
+      return res.status(404).json(jsonResponse(false, "Order not found", null));
     }
-  });
-
-  let sequence = 1;
-
-  if (lastOrder?.invoiceNumber) {
-    const lastSeq = lastOrder.invoiceNumber.slice(prefix.length);
-    sequence = parseInt(lastSeq) + 1;
+ 
+    return res.status(200).json(jsonResponse(true, "Invoice data fetched", {
+      invoiceNumber:         order.invoiceNumber,
+      createdAt:             order.createdAt,
+      status:                order.status,
+ 
+      // Customer
+      customerName:          order.customerName,
+      customerPhone:         order.customerPhone,
+      customerEmail:         order.customerEmail,
+      customerAddress:       order.customerAddress,
+      customerCity:          order.customerCity,
+      customerPostalCode:    order.customerPostalCode,
+ 
+      // Payment
+      paymentMethod:         order.paymentMethod,
+ 
+      // Charges
+      deliveryCharge:        order.deliveryChargeInside ?? order.deliveryChargeOutside ?? 0,
+      platformCharge:        order.platformCharge       ?? 0,
+      couponDiscount:        order.coupon?.discountAmount ?? 0,
+      subtotal:              order.subtotal,
+ 
+      // Items
+      orderItems: order.orderItems.map((item) => ({
+        name:                  item.name,
+        brandName:             item.brandName,
+        barcode:               item.barcode,
+        productCode:           item.productCode,
+        size:                  item.size,
+        quantity:              item.quantity,
+        retailPrice:           item.retailPrice,
+        discountedRetailPrice: item.discountedRetailPrice,
+        totalPrice:            item.totalPrice,
+      })),
+    }));
+ 
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json(jsonResponse(false, error.message, null));
   }
-
-  return `${prefix}${String(sequence).padStart(4, "0")}`;
 };
 
 
