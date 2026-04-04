@@ -17,6 +17,7 @@ import nodemailer from "nodemailer";
 import sendTelegramMessage from "../../utils/Sendtelegram.js";
 import { autoAssignRider } from "../../utils/assignRider.js";
 import { calculateDeliveryCharge } from "../../utils/Deliverycharge.js";
+import { generateInvoiceNumber } from "../../utils/generateInvoiceNumber.js";
 
 
 
@@ -196,7 +197,7 @@ export const createOrder = async (req, res) => {
     // ----------------------------------------------------------------
     // 3. Invoice number
     // ----------------------------------------------------------------
-    const invoiceNumber = await getInvoiceData(
+    const invoiceNumber = await generateInvoiceNumber(
       prisma,
       productInfo.brand?.brandID || "00",
       productInfo.productCode || "0000"
