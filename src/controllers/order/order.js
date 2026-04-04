@@ -58,66 +58,6 @@ const sendEmail = async (to, subject, html) => {
 };
 
 
-export const getInvoiceData  = async (req,res) => {
-
-  const { orderId } = req.params;
- 
-  try {
-    const order = await prisma.order.findFirst({
-      where: { id: orderId },
-      include: {
-        orderItems: true,
-        coupon:     true,
-      },
-    });
- 
-    if (!order) {
-      return res.status(404).json(jsonResponse(false, "Order not found", null));
-    }
- 
-    return res.status(200).json(jsonResponse(true, "Invoice data fetched", {
-      invoiceNumber:         order.invoiceNumber,
-      createdAt:             order.createdAt,
-      status:                order.status,
- 
-      // Customer
-      customerName:          order.customerName,
-      customerPhone:         order.customerPhone,
-      customerEmail:         order.customerEmail,
-      customerAddress:       order.customerAddress,
-      customerCity:          order.customerCity,
-      customerPostalCode:    order.customerPostalCode,
- 
-      // Payment
-      paymentMethod:         order.paymentMethod,
- 
-      // Charges
-      deliveryCharge:        order.deliveryChargeInside ?? order.deliveryChargeOutside ?? 0,
-      platformCharge:        order.platformCharge       ?? 0,
-      couponDiscount:        order.coupon?.discountAmount ?? 0,
-      subtotal:              order.subtotal,
- 
-      // Items
-      orderItems: order.orderItems.map((item) => ({
-        name:                  item.name,
-        brandName:             item.brandName,
-        barcode:               item.barcode,
-        productCode:           item.productCode,
-        size:                  item.size,
-        quantity:              item.quantity,
-        retailPrice:           item.retailPrice,
-        discountedRetailPrice: item.discountedRetailPrice,
-        totalPrice:            item.totalPrice,
-      })),
-    }));
- 
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json(jsonResponse(false, error.message, null));
-  }
-};
-
-
 export const getDeliveryCharge = async (req, res) => {
   const { customerLat, customerLng,productId  } = req.body;
 
@@ -256,7 +196,7 @@ export const createOrder = async (req, res) => {
     // ----------------------------------------------------------------
     // 3. Invoice number
     // ----------------------------------------------------------------
-    const invoiceNumber = await generateInvoiceNumber(
+    const invoiceNumber = await getInvoiceData(
       prisma,
       productInfo.brand?.brandID || "00",
       productInfo.productCode || "0000"
@@ -662,6 +602,74 @@ export const createOrderSsl = async (req, res) => {
     // return;
   }
 };
+
+
+export const getInvoiceData = async (req, res) => {
+  const { orderId } = req.params;
+
+  try {
+    const order = await prisma.order.findFirst({
+      where: { id: orderId },
+      include: {
+        orderItems: true,
+        coupon:     true,
+      },
+    });
+
+    if (!order) {
+      return res.status(404).json(jsonResponse(false, "Order not found", null));
+    }
+
+    return res.status(200).json(jsonResponse(true, "Invoice data fetched", {
+      invoiceNumber:      order.invoiceNumber,
+      createdAt:          order.createdAt,
+      status:             order.status,
+
+      customerName:       order.customerName,
+      customerPhone:      order.customerPhone,
+      customerEmail:      order.customerEmail,
+      customerAddress:    order.customerAddress,
+      customerCity:       order.customerCity,
+      customerPostalCode: order.customerPostalCode,
+
+      paymentMethod:      order.paymentMethod,
+
+      deliveryCharge:     order.deliveryChargeInside ?? order.deliveryChargeOutside ?? 0,
+      platformCharge:     order.platformCharge       ?? 0,
+      couponDiscount:     order.coupon?.discountAmount ?? 0,
+      subtotal:           order.subtotal,
+
+      orderItems: order.orderItems.map((item) => ({
+        name:                  item.name,
+        brandName:             item.brandName,
+        barcode:               item.barcode,
+        productCode:           item.productCode,
+        size:                  item.size,
+        quantity:              item.quantity,
+        retailPrice:           item.retailPrice,
+        discountedRetailPrice: item.discountedRetailPrice,
+        totalPrice:            item.totalPrice,
+      })),
+    }));
+
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json(jsonResponse(false, error.message, null));
+  }
+};
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 export const createOrderSuccess = async (req, res) => {
