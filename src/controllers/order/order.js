@@ -121,7 +121,6 @@ export const getDeliveryCharge = async (req, res) => {
  */
 
 
-
 export const createOrder = async (req, res) => {
   try {
     const {
@@ -151,9 +150,7 @@ export const createOrder = async (req, res) => {
     }
 
     if (!orderItems || orderItems.length === 0) {
-      return res
-        .status(400)
-        .json(jsonResponse(false, "Please select at least 1 item", null));
+      return res.status(400).json(jsonResponse(false, "Please select at least 1 item", null));
     }
 
     // ----------------------------------------------------------------
@@ -167,9 +164,7 @@ export const createOrder = async (req, res) => {
     });
 
     if (!productInfo) {
-      return res
-        .status(400)
-        .json(jsonResponse(false, "Product not found", null));
+      return res.status(400).json(jsonResponse(false, "Product not found", null));
     }
 
     // ----------------------------------------------------------------
@@ -178,15 +173,13 @@ export const createOrder = async (req, res) => {
     const SHOP_LAT = productInfo?.brand?.lat ?? null;
     const SHOP_LNG = productInfo?.brand?.lng ?? null;
 
-    let deliveryCharge     = 30; // fallback যদি brand location না থাকে
+    let deliveryCharge     = 30;
     let deliveryDistanceKm = 0;
 
     if (customerLat && customerLng && SHOP_LAT && SHOP_LNG) {
       const route = await getRouteETA(
-        SHOP_LAT,
-        SHOP_LNG,
-        parseFloat(customerLat),
-        parseFloat(customerLng)
+        SHOP_LAT, SHOP_LNG,
+        parseFloat(customerLat), parseFloat(customerLng)
       );
       if (route?.distanceKm) {
         deliveryDistanceKm = route.distanceKm;
@@ -200,7 +193,7 @@ export const createOrder = async (req, res) => {
     const invoiceNumber = await generateInvoiceNumber(
       prisma,
       productInfo.brand?.brandID || "00",
-      productInfo.productCode || "0000"
+      productInfo.productCode    || "0000"
     );
 
     // ----------------------------------------------------------------
@@ -232,8 +225,8 @@ export const createOrder = async (req, res) => {
         newOrderItems.push({
           productId:             item.productId,
           productCode:           product.productCode || null,
-          barcode:               product.barcode || null,
-          brandId:               product.brandId || null,
+          barcode:               product.barcode     || null,
+          brandId:               product.brandId     || null,
           brandName:             product.brand?.name || null,
           productAttributeId:    item.productAttributeId,
           name:                  product.name,
@@ -253,17 +246,37 @@ export const createOrder = async (req, res) => {
         subtotalCost += totalCostPrice;
       }
 
+      // ✅ Coupon — advanced discount calculate
+      let couponDiscountAmount = 0;
+      let isFreeDelivery       = false;
+
       const coupon = couponId
         ? await tx.coupon.findFirst({ where: { id: couponId, isActive: true } })
         : null;
 
-      const safePlatformCharge = Number(platformCharge) || 0;
+      if (coupon) {
+        if (coupon.discountType === "flat") {
+          couponDiscountAmount = Number(coupon.discountAmount ?? 0);
+        } else if (coupon.discountType === "percent") {
+          const pct = (subtotal * Number(coupon.discountPercent ?? 0)) / 100;
+          couponDiscountAmount = coupon.maxDiscount
+            ? Math.min(pct, coupon.maxDiscount)
+            : pct;
+        } else if (coupon.discountType === "free_delivery") {
+          isFreeDelivery       = true;
+          couponDiscountAmount  = deliveryCharge; // delivery charge টাই discount হবে
+        }
+      }
+
+      // Free delivery হলে charge 0
+      const finalDeliveryCharge = isFreeDelivery ? 0 : deliveryCharge;
+      const safePlatformCharge  = Number(platformCharge) || 0;
 
       const finalSubtotal =
         subtotal +
-        deliveryCharge +
+        finalDeliveryCharge +
         safePlatformCharge -
-        (coupon?.discountAmount ?? 0);
+        Math.round(couponDiscountAmount);
 
       const order = await tx.order.create({
         data: {
@@ -276,14 +289,14 @@ export const createOrder = async (req, res) => {
           customerEmail,
           customerCity,
           customerPostalCode,
-          customerLat:  customerLat ? parseFloat(customerLat) : null,
-          customerLng:  customerLng ? parseFloat(customerLng) : null,
+          customerLat:           customerLat ? parseFloat(customerLat) : null,
+          customerLng:           customerLng ? parseFloat(customerLng) : null,
           invoiceNumber,
           totalItems,
           subtotalCost,
-          subtotal: finalSubtotal,
+          subtotal:              finalSubtotal,
           paymentMethod,
-          deliveryChargeInside:  deliveryCharge,
+          deliveryChargeInside:  finalDeliveryCharge,
           deliveryChargeOutside: null,
           platformCharge:        safePlatformCharge,
           orderItems: { create: newOrderItems },
@@ -302,7 +315,17 @@ export const createOrder = async (req, res) => {
     });
 
     // ----------------------------------------------------------------
-    // 5. Email
+    // 5. Coupon usage record + Loyalty check
+    // ----------------------------------------------------------------
+    if (couponId) {
+      await recordCouponUsage(couponId, customerPhone, newOrder.id);
+    }
+
+    // প্রতি ৫ম order-এ loyalty coupon auto generate + email
+    checkAndSendLoyaltyCoupon(customerPhone, customerEmail, customerName).catch(console.error);
+
+    // ----------------------------------------------------------------
+    // 6. Email
     // ----------------------------------------------------------------
     const orderTime         = new Date();
     const estimatedDelivery = new Date(orderTime.getTime() + 40 * 60 * 1000);
@@ -352,17 +375,13 @@ export const createOrder = async (req, res) => {
                 </tr>
               </thead>
               <tbody>
-                ${newOrder.orderItems
-                  .map(
-                    (item, index) => `
+                ${newOrder.orderItems.map((item, index) => `
                   <tr style="background:${index % 2 === 0 ? "#ffffff" : "#fdf6f0"};">
                     <td style="padding:10px 14px;color:#333;">${item.name}</td>
                     <td style="padding:10px 14px;color:#555;text-align:center;">${item.size || "—"}</td>
                     <td style="padding:10px 14px;color:#555;text-align:center;">${item.quantity}</td>
                     <td style="padding:10px 14px;color:#c8773a;font-weight:600;text-align:right;">${item.discountedRetailPrice} TK</td>
-                  </tr>`
-                  )
-                  .join("")}
+                  </tr>`).join("")}
               </tbody>
             </table>
             <p style="font-size:13px;font-weight:700;color:#c8773a;text-transform:uppercase;letter-spacing:1px;margin:0 0 10px;">Order Summary</p>
@@ -419,30 +438,19 @@ export const createOrder = async (req, res) => {
 </html>`;
 
     if (customerEmail) {
-      await sendEmail(
-        customerEmail,
-        `Order Placed from I-Mall — Invoice #${invoiceNumber}`,
-        emailBody
-      );
+      await sendEmail(customerEmail, `Order Placed from I-Mall — Invoice #${invoiceNumber}`, emailBody);
     }
-    await sendEmail(
-      "shamimrocky801@yahoo.com",
-      `New Order Received — Invoice #${invoiceNumber}`,
-      emailBody
-    );
+    await sendEmail("shamimrocky801@yahoo.com", `New Order Received — Invoice #${invoiceNumber}`, emailBody);
 
     autoAssignRider(prisma, newOrder, sendTelegramMessage).catch(console.error);
 
-    return res
-      .status(200)
-      .json(jsonResponse(true, "Your order has been placed successfully", newOrder));
+    return res.status(200).json(jsonResponse(true, "Your order has been placed successfully", newOrder));
 
   } catch (error) {
     console.log(error);
     return res.status(500).json(jsonResponse(false, error.message || error, null));
   }
 };
-
 
 //create order ssl
 export const createOrderSsl = async (req, res) => {

@@ -398,14 +398,23 @@ model Review {
 }
 
 model Coupon {
-  id              String   @id @default(uuid())
+  id              String        @id @default(uuid())
   code            String
   name            String
   orderPriceLimit Float?
   discountAmount  Float
-  isActive        Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  isActive        Boolean       @default(true)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  discountPercent Float?
+  maxDiscount     Float?
+  discountType    String        @default("flat")
+  couponType      String        @default("general")
+  usageLimit      Int?
+  usageCount      Int           @default(0)
+  perUserLimit    Int           @default(1)
+  expiresAt       DateTime?
+  CouponUsage     CouponUsage[]
   order           Order[]
 }
 
@@ -473,6 +482,15 @@ model RiderLocation {
   isOnline      Boolean  @default(false)
   updatedAt     DateTime @default(now()) @db.Timestamp(6)
   User          User     @relation(fields: [deliveryManId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model CouponUsage {
+  id        String   @id @default(dbgenerated("gen_random_uuid()"))
+  couponId  String
+  userPhone String
+  orderId   String?
+  createdAt DateTime @default(now())
+  Coupon    Coupon   @relation(fields: [couponId], references: [id])
 }
 
 enum OrderStatus {
