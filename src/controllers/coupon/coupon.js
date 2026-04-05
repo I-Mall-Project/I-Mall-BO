@@ -145,7 +145,7 @@ export const getCoupons = async (req, res) => {
       where: {
         name: { contains: req.query.name || "", mode: "insensitive" },
       },
-      include: { _count: { select: { couponUsage: true } } },
+      include: { _count: { select: { CouponUsage: true } } },
       orderBy: { createdAt: "desc" },
       skip:  req.query.limit && req.query.page ? parseInt(req.query.limit * (req.query.page - 1)) : parseInt(defaultLimit() * (defaultPage() - 1)),
       take:  req.query.limit ? parseInt(req.query.limit) : parseInt(defaultLimit()),
@@ -167,8 +167,8 @@ export const getCoupon = async (req, res) => {
     const coupon = await prisma.coupon.findFirst({
       where: { id: req.params.id },
       include: {
-        couponUsage: { orderBy: { createdAt: "desc" }, take: 20 },
-        _count: { select: { couponUsages: true } },
+        CouponUsage: { orderBy: { createdAt: "desc" }, take: 20 },
+        _count: { select: { CouponUsage: true } },
       },
     });
     if (!coupon) return res.status(404).json(jsonResponse(false, "Coupon not found", null));
