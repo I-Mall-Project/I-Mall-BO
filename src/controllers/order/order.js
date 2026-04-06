@@ -18,7 +18,7 @@ import sendTelegramMessage from "../../utils/Sendtelegram.js";
 import { autoAssignRider } from "../../utils/assignRider.js";
 import { calculateDeliveryCharge } from "../../utils/Deliverycharge.js";
 import { generateInvoiceNumber } from "../../utils/generateInvoiceNumber.js";
-import { checkAndSendLoyaltyCoupon } from "../coupon/coupon.js";
+import { checkAndSendLoyaltyCoupon, recordCouponUsage } from "../coupon/coupon.js";
 
 
 
