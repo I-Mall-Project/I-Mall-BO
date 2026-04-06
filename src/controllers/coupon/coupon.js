@@ -394,7 +394,9 @@ export const recordCouponUsage = async (couponId, customerPhone, orderId) => {
   }
 };
 
-// ─── Auto generate loyalty coupon ─────────────────────────
+// ─── Auto generate loyalty coupon ────────────────
+
+
 // কোনো customer X টা order করলে automatically loyalty coupon তৈরি করে email পাঠায়
 export const checkAndSendLoyaltyCoupon = async (customerPhone, customerEmail, customerName) => {
   try {
