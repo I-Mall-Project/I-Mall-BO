@@ -339,6 +339,7 @@ model Order {
   deliveredAt                    DateTime?         @db.Timestamp(6)
   customerLat                    Float?
   customerLng                    Float?
+  orderType                      String?           @default("ONLINE") @db.VarChar(20)
   DeliveryLocation               DeliveryLocation?
   coupon                         Coupon?           @relation(fields: [couponId], references: [id], onDelete: Cascade)
   user                           User?             @relation(fields: [userId], references: [id], onDelete: Cascade)

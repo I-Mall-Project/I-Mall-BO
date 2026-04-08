@@ -139,6 +139,8 @@ export const createOrder = async (req, res) => {
       customerLat,
       customerLng,
       orderItems,
+        orderType,      // ← নতুন field
+
     } = req.body;
 
     const inputValidation = validateInput(
@@ -174,10 +176,14 @@ export const createOrder = async (req, res) => {
     const SHOP_LAT = productInfo?.brand?.lat ?? null;
     const SHOP_LNG = productInfo?.brand?.lng ?? null;
 
-    let deliveryCharge     = 30;
-    let deliveryDistanceKm = 0;
+    // createOrder এ এই check যোগ করুন:
+const isOfflineSale = orderType === "OFFLINE";
 
-    if (customerLat && customerLng && SHOP_LAT && SHOP_LNG) {
+let deliveryCharge = isOfflineSale ? 0 : 30;  // offline এ ০
+let deliveryDistanceKm = 0;
+
+
+    if (!isOfflineSale && customerLat && customerLng && SHOP_LAT && SHOP_LNG) {
       const route = await getRouteETA(
         SHOP_LAT, SHOP_LNG,
         parseFloat(customerLat), parseFloat(customerLng)
@@ -273,6 +279,8 @@ export const createOrder = async (req, res) => {
       const finalDeliveryCharge = isFreeDelivery ? 0 : deliveryCharge;
       const safePlatformCharge  = Number(platformCharge) || 0;
 
+
+
       const finalSubtotal =
         subtotal +
         finalDeliveryCharge +
@@ -301,6 +309,7 @@ export const createOrder = async (req, res) => {
           deliveryChargeOutside: null,
           platformCharge:        safePlatformCharge,
           orderItems: { create: newOrderItems },
+          orderType, // ← নতুন field
         },
         include: { orderItems: true },
       });
@@ -667,15 +676,6 @@ export const getInvoiceData = async (req, res) => {
     return res.status(500).json(jsonResponse(false, error.message, null));
   }
 };
-
-
-
-
-
-
-
-
-
 
 
 

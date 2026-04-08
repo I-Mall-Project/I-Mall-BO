@@ -1229,12 +1229,12 @@ export const getMyBrands = async (req, res) => {
  
 export const getMyBrandOrders = async (req, res) => {
   try {
-    const brandIds = await getOwnerBrandIds(req.user.id);
+   const brandIds = await getOwnerBrandIds(req.user.id);
     if (brandIds.length === 0)
       return res.status(200).json(jsonResponse(true, "No orders found", []));
- 
-    const { brandId, status, from, to, page = 1, limit = 20 } = req.query;
- 
+
+    const { brandId, status, from, to, page = 1, limit = 20, orderType } = req.query; // ← orderType যোগ
+
     const where = {
       isDeleted: false,
       orderItems: {
@@ -1243,11 +1243,11 @@ export const getMyBrandOrders = async (req, res) => {
         },
       },
       ...(status && { status }),
+      ...(orderType && { orderType }),   // ← এটা add করুন
       ...(from && to && {
         createdAt: { gte: new Date(from), lte: new Date(to) },
       }),
     };
- 
     const [orders, total] = await Promise.all([
       prisma.order.findMany({
         where,
