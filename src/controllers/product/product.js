@@ -621,80 +621,52 @@ export const updateProduct = async (req, res) => {
 };
 
 //update product attribute
+
 export const updateProductAttribute = async (req, res) => {
   try {
     return await prisma.$transaction(async (tx) => {
-      const { size, costPrice, retailPrice, discountPercent, stockAmount } =
-        req.body;
+      const { size, costPrice, retailPrice, discountPercent, stockAmount } = req.body;
 
-      //get particular product attribute for calculating discount prices
       const particularProductAttribute = await tx.productAttribute.findFirst({
         where: { id: req.params.id },
       });
 
       if (!particularProductAttribute) {
-        return res
-          .status(404)
-          .json(
-            jsonResponse(false, "This product attribute does not exist", null)
-          );
+        return res.status(404).json(jsonResponse(false, "This product attribute does not exist", null));
       }
 
-      //calculation for discount prices
-      let dPercent = particularProductAttribute.discountPercent;
-      let dPrice = particularProductAttribute.discountPrice;
-      let dRetailPrice = particularProductAttribute.discountedRetailPrice;
-      let newRetailPrice = particularProductAttribute.retailPrice;
+      // existing values fallback
+      const finalRetailPrice    = retailPrice     !== undefined ? Number(retailPrice)     : particularProductAttribute.retailPrice;
+      const finalDiscountPercent = discountPercent !== undefined ? Number(discountPercent) : particularProductAttribute.discountPercent;
+      const finalCostPrice      = costPrice       !== undefined ? Number(costPrice)       : particularProductAttribute.costPrice;
+      const finalSize           = size            !== undefined ? size                    : particularProductAttribute.size;
+      const finalStock          = stockAmount     !== undefined ? Number(stockAmount)     : particularProductAttribute.stockAmount;
 
-      if (discountPercent && retailPrice) {
-        dPrice = retailPrice * (discountPercent / 100);
-        dRetailPrice = retailPrice - dPrice;
-      } else if (discountPercent) {
-        dPrice = newRetailPrice * (discountPercent / 100);
-        dRetailPrice = newRetailPrice - dPrice;
-      } else if (retailPrice) {
-        dPrice = retailPrice * (dPercent / 100);
-        dRetailPrice = retailPrice - dPrice;
-      }
+      const finalDiscountPrice        = finalRetailPrice * (finalDiscountPercent / 100);
+      const finalDiscountedRetailPrice = finalRetailPrice - finalDiscountPrice;
 
-      //update product attribute
       const productAttribute = await tx.productAttribute.update({
         where: { id: req.params.id },
         data: {
-          size: size,
-          costPrice: Number(costPrice),
-          retailPrice: Number(retailPrice),
-          discountPercent: Number(discountPercent) ?? 0,
-          discountPrice: Number(retailPrice) * (Number(discountPercent) / 100),
-          discountedRetailPrice:
-            Number(retailPrice) -
-            Number(retailPrice) * (Number(discountPercent) / 100),
-          stockAmount: Number(stockAmount),
-          // updatedBy: req.user.id,
+          size:                   finalSize,
+          costPrice:              finalCostPrice,
+          retailPrice:            finalRetailPrice,
+          discountPercent:        finalDiscountPercent,
+          discountPrice:          finalDiscountPrice,
+          discountedRetailPrice:  finalDiscountedRetailPrice,
+          stockAmount:            finalStock,
         },
       });
 
       if (productAttribute) {
-        return res
-          .status(200)
-          .json(
-            jsonResponse(
-              true,
-              `Product attribute has been updated`,
-              productAttribute
-            )
-          );
+        return res.status(200).json(jsonResponse(true, `Product attribute has been updated`, productAttribute));
       } else {
-        return res
-          .status(404)
-          .json(
-            jsonResponse(false, "Product attribute has not been updated", null)
-          );
+        return res.status(404).json(jsonResponse(false, "Product attribute has not been updated", null));
       }
     });
   } catch (error) {
     console.log(error);
-    return res.status(500).json(jsonResponse(false, error, null));
+    return res.status(500).json(jsonResponse(false, error.message, null));
   }
 };
 
