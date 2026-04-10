@@ -1274,43 +1274,79 @@ export const getMyBrandOrders = async (req, res) => {
 // BRAND OWNER — ANALYTICS
 // ═══════════════════════════════════════
  
+// ─── getMyBrandAnalytics — updated version ────────────────────────────────────
+// নতুন: "yesterday" range + onlineOrders/offlineOrders/onlineRevenue/offlineRevenue summary তে
+
 export const getMyBrandAnalytics = async (req, res) => {
   try {
     const brandIds = await getOwnerBrandIds(req.user.id);
     if (brandIds.length === 0)
       return res.status(200).json(jsonResponse(true, "No data", null));
- 
+
     const { brandId, range = "monthly" } = req.query;
     const targetBrandIds = brandId ? [brandId] : brandIds;
- 
+
     const now = new Date();
     let fromDate;
-    if (range === "daily")   fromDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    if (range === "weekly")  fromDate = new Date(now.getTime() - 7  * 24 * 60 * 60 * 1000);
-    if (range === "monthly") fromDate = new Date(now.getFullYear(), now.getMonth(), 1);
-    if (range === "yearly")  fromDate = new Date(now.getFullYear(), 0, 1);
- 
-    // নিজের brand এর order items
+
+    // ── Date range calculation ──
+    if (range === "today") {
+      fromDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    } else if (range === "yesterday") {
+      const y = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+      fromDate = y;
+      // toDate = start of today (filter createdAt >= yesterday AND < today)
+    } else if (range === "weekly") {
+      fromDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    } else if (range === "monthly") {
+      fromDate = new Date(now.getFullYear(), now.getMonth(), 1);
+    } else if (range === "yearly") {
+      fromDate = new Date(now.getFullYear(), 0, 1);
+    }
+
+    // "yesterday" এর জন্য toDate = আজকের শুরু
+    const toDate = range === "yesterday"
+      ? new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      : null;
+
+    // ── Order items fetch ──
     const orderItems = await prisma.orderItem.findMany({
       where: {
         brandId: { in: targetBrandIds },
         order: {
           isDeleted: false,
           status: { in: ["DELIVERED"] },
-          createdAt: { gte: fromDate },
+          createdAt: {
+            gte: fromDate,
+            ...(toDate && { lt: toDate }),
+          },
         },
       },
-      include: { order: { select: { createdAt: true, status: true } } },
+      include: {
+        order: {
+          select: { createdAt: true, status: true, orderType: true },
+        },
+      },
     });
- 
-    // Total revenue & profit
-    const totalRevenue = orderItems.reduce((sum, item) => sum + Number(item.totalPrice ?? 0), 0);
-    const totalCost    = orderItems.reduce((sum, item) => sum + Number(item.totalCostPrice ?? 0), 0);
+
+    // ── Summary ──
+    const totalRevenue = orderItems.reduce((sum, i) => sum + Number(i.totalPrice ?? 0), 0);
+    const totalCost    = orderItems.reduce((sum, i) => sum + Number(i.totalCostPrice ?? 0), 0);
     const totalProfit  = totalRevenue - totalCost;
-    const totalOrders  = new Set(orderItems.map(i => i.orderId)).size;
-    const totalItems   = orderItems.reduce((sum, item) => sum + item.quantity, 0);
- 
-    // Product wise analytics
+    const orderIdSet   = new Set(orderItems.map(i => i.orderId));
+    const totalOrders  = orderIdSet.size;
+    const totalItems   = orderItems.reduce((sum, i) => sum + i.quantity, 0);
+
+    // ── Online vs Offline split ──
+    const onlineItems  = orderItems.filter(i => i.order.orderType !== "OFFLINE");
+    const offlineItems = orderItems.filter(i => i.order.orderType === "OFFLINE");
+
+    const onlineOrders   = new Set(onlineItems.map(i => i.orderId)).size;
+    const offlineOrders  = new Set(offlineItems.map(i => i.orderId)).size;
+    const onlineRevenue  = onlineItems.reduce((s, i) => s + Number(i.totalPrice ?? 0), 0);
+    const offlineRevenue = offlineItems.reduce((s, i) => s + Number(i.totalPrice ?? 0), 0);
+
+    // ── Product analytics ──
     const productMap = {};
     for (const item of orderItems) {
       const key = item.name;
@@ -1325,9 +1361,9 @@ export const getMyBrandAnalytics = async (req, res) => {
     }
     const productAnalytics = Object.values(productMap)
       .map(p => ({ ...p, orders: p.orders.size }))
-      .sort((a, b) => b.revenue - a.revenue);
- 
-    // Daily breakdown (last 30 days for chart)
+      .sort((a, b) => b.revenue - a.revenue); // top sellers first
+
+    // ── Daily breakdown ──
     const dailyMap = {};
     for (const item of orderItems) {
       const day = item.order.createdAt.toISOString().split("T")[0];
@@ -1339,9 +1375,20 @@ export const getMyBrandAnalytics = async (req, res) => {
     const dailyBreakdown = Object.values(dailyMap)
       .map(d => ({ ...d, orders: d.orders.size }))
       .sort((a, b) => a.date.localeCompare(b.date));
- 
+
     return res.status(200).json(jsonResponse(true, "Analytics fetched", {
-      summary: { totalRevenue, totalCost, totalProfit, totalOrders, totalItems, range },
+      summary: {
+        totalRevenue, totalCost, totalProfit,
+        totalOrders, totalItems, range,
+        // ── নতুন fields ──
+        onlineOrders, offlineOrders,
+        onlineRevenue, offlineRevenue,
+      },
+      // Comparison এর জন্য top-level এও রাখছি (frontend সহজে access করতে পারবে)
+      onlineOrders,
+      offlineOrders,
+      onlineRevenue,
+      offlineRevenue,
       productAnalytics,
       dailyBreakdown,
     }));
