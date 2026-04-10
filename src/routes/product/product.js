@@ -55,10 +55,10 @@ router.delete("/v1/products/images/:id", productRemove, verify, deleteProductIma
 router.delete("/v1/products/:id", productRemove, verify, deleteProduct);
 
 // attributes
-router.post("/v1/products-attributes", verify, createProductAttribute);
-router.get("/v1/products-attributes/:id", verify, getProductAttributes);
-router.put("/v1/products-attributes/:id", verify, updateProductAttribute);
-router.delete("/v1/products-attributes/:id", verify, deleteProductAttribute);
+router.post("/v1/products-attributes", createProductAttribute);
+router.get("/v1/products-attributes/:id",  getProductAttributes);
+router.put("/v1/products-attributes/:id", updateProductAttribute);
+router.delete("/v1/products-attributes/:id", deleteProductAttribute);
 
 // images
 router.get("/v1/products-images/:id", verify, getProductImages);
