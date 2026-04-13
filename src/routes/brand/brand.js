@@ -27,7 +27,7 @@ const router = express.Router();
 
 // ── Brand (Admin) ──────────────────────────
 router.post("/v1/brands", verify, upload.single("image"), createBrand);
-router.get("/v1/brands", verify, getBrands);
+router.get("/v1/brands",  getBrands);
 router.get("/v1/brands/:id", verify, getBrand);
 router.put("/v1/brands/:id", verify, upload.single("image"), updateBrand);
 router.delete("/v1/brands/:id", verify, deleteBrand);
