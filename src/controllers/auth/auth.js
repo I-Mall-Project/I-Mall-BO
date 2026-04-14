@@ -241,7 +241,6 @@ export const login = async (req, res) => {
 };
 
 
-//send login otp to mail
 export const sendLoginOtp = async (req, res) => {
   try {
     return await prisma.$transaction(async (tx) => {
@@ -266,10 +265,10 @@ export const sendLoginOtp = async (req, res) => {
           .json(jsonResponse(false, "You are not permitted!", null));
       }
 
-      // ✅ OTP generate
+      // ✅ OTP generate (STRING)
       const sixDigitOtp = Math.floor(100000 + Math.random() * 900000).toString();
 
-      // ✅ update OTP every time
+      // ✅ update OTP
       const updateOtp = await tx.user.update({
         where: { id: user.id },
         data: {
@@ -293,7 +292,7 @@ export const sendLoginOtp = async (req, res) => {
       // ✅ send email
       await sendEmail(
         user.email,
-        "I-Mall OTP",
+        "OTP Login",
         `<p>Your OTP is <b>${sixDigitOtp}</b></p>`
       );
 
@@ -309,6 +308,7 @@ export const sendLoginOtp = async (req, res) => {
 };
 
 //login with otp
+
 export const loginWithOtp = async (req, res) => {
   try {
     return await prisma.$transaction(async (tx) => {
@@ -333,7 +333,7 @@ export const loginWithOtp = async (req, res) => {
           .json(jsonResponse(false, "OTP not generated", null));
       }
 
-      // ✅ OTP match
+      // ✅ OTP match (STRING compare)
       if (user.otp !== req.body.otp.toString()) {
         return res
           .status(400)
@@ -341,21 +341,15 @@ export const loginWithOtp = async (req, res) => {
       }
 
       // ✅ clear OTP after success
-      const updateUser = await tx.user.update({
+      await tx.user.update({
         where: { id: user.id },
         data: {
           otp: null,
         },
       });
 
-      if (!updateUser) {
-        return res
-          .status(500)
-          .json(jsonResponse(false, "Login failed", null));
-      }
-
       // =========================
-      // TOKEN GENERATION (same as yours)
+      // ROLE + MODULE (your original logic)
       // =========================
 
       let roleModuleList = user?.roleId
@@ -375,10 +369,12 @@ export const loginWithOtp = async (req, res) => {
 
       const token = jwtSign({
         id: user.id,
+        parentId: user.parentId ? user.parentId : user.id,
         phone: user.phone,
         email: user.email,
         roleId: user.roleId,
         roleName: roleName.name,
+        isActive: user.isActive,
         moduleNames: module_names,
       });
 
@@ -401,6 +397,9 @@ export const loginWithOtp = async (req, res) => {
     return res.status(500).json(jsonResponse(false, error.message, null));
   }
 };
+
+
+
 //logout
 export const logout = (req, res) => {
   res
