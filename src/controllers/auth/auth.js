@@ -112,21 +112,7 @@ const module_name = "auth";
 export const register = async (req, res) => {
   try {
     return await prisma.$transaction(async (tx) => {
-      // Check if user exists
-      const existingUser = await tx.user.findFirst({
-        where: {
-          OR: [{ email: req.body.email }, { phone: req.body.phone }],
-          isDeleted: false,
-        },
-      });
 
-      if (existingUser) {
-        return res
-          .status(409)
-          .json(jsonResponse(false, "User already exists", null));
-      }
-
-      // Destructure body
       const {
         roleId,
         parentId,
@@ -141,82 +127,120 @@ export const register = async (req, res) => {
         otpCount,
       } = req.body;
 
-      // Validate required fields
+      // ✅ Validate required fields (only name + phone)
       const inputValidation = validateInput(
-       [name, phone],
-  ["Name", "Phone"]
+        [name, phone],
+        ["Name", "Phone"]
       );
+
       if (inputValidation) {
         return res.status(400).json(jsonResponse(false, inputValidation, null));
       }
 
-      // Prepare user data
+      // ✅ Build dynamic OR condition (IMPORTANT FIX)
+      const conditions = [];
+
+      if (email) {
+        conditions.push({ email });
+      }
+
+      if (phone) {
+        conditions.push({ phone });
+      }
+
+      // Safety check
+      if (conditions.length === 0) {
+        return res
+          .status(400)
+          .json(jsonResponse(false, "Phone is required", null));
+      }
+
+      // ✅ Check if user exists
+      const existingUser = await tx.user.findFirst({
+        where: {
+          OR: conditions,
+          isDeleted: false,
+        },
+      });
+
+      if (existingUser) {
+        return res
+          .status(409)
+          .json(jsonResponse(false, "User already exists", null));
+      }
+
+      // ✅ Prepare user data (avoid null issue)
       const userData = {
         roleId,
         parentId,
         name,
-        email,
         phone,
-        presentAddress,
-        permanentAddress,
-        nidNo,
-        password,
-        otp,
-        otpCount,
+        ...(email && { email }), // only add if exists
+        ...(presentAddress && { presentAddress }),
+        ...(permanentAddress && { permanentAddress }),
+        ...(nidNo && { nidNo }),
+        ...(password && { password }),
+        ...(otp && { otp }),
+        ...(otpCount && { otpCount }),
         createdBy: req?.user?.id,
       };
 
-      // ✅ Handle multiple NID attachment uploads
-      if (req.files?.nidAttachment && req.files.nidAttachment.length > 0) {
-        const nidUploadPromises = req.files.nidAttachment.map(
-          (file) =>
-            new Promise((resolve, reject) => {
-              uploadToCLoudinary(file, "user_module", (err, result) => {
-                if (err) reject(err);
-                else resolve(result);
-              });
-            })
+      // ✅ NID attachments upload
+      if (req.files?.nidAttachment?.length > 0) {
+        const uploads = await Promise.all(
+          req.files.nidAttachment.map(
+            (file) =>
+              new Promise((resolve, reject) => {
+                uploadToCLoudinary(file, "user_module", (err, result) => {
+                  if (err) reject(err);
+                  else resolve(result);
+                });
+              })
+          )
         );
 
-        const nidUploadResults = await Promise.all(nidUploadPromises);
-
-        const nidUrls = nidUploadResults.map((result) => {
-          if (!result?.secure_url) throw new Error("NID upload failed");
-          return result.secure_url;
+        userData.nidAttachment = uploads.map((r) => {
+          if (!r?.secure_url) throw new Error("NID upload failed");
+          return r.secure_url;
         });
-
-        userData.nidAttachment = nidUrls;
       }
 
-      // ✅ Handle Passport photo upload
-      if (req.files?.passportPhoto && req.files.passportPhoto.length > 0) {
-        const uploadResult = await new Promise((resolve, reject) => {
-          uploadToCLoudinary(req.files.passportPhoto[0], "user_module", (err, result) => {
-            if (err) reject(err);
-            else resolve(result);
-          });
+      // ✅ Passport photo upload
+      if (req.files?.passportPhoto?.length > 0) {
+        const upload = await new Promise((resolve, reject) => {
+          uploadToCLoudinary(
+            req.files.passportPhoto[0],
+            "user_module",
+            (err, result) => {
+              if (err) reject(err);
+              else resolve(result);
+            }
+          );
         });
-        if (!uploadResult?.secure_url) {
+
+        if (!upload?.secure_url) {
           throw new Error("Passport photo upload failed");
         }
-        userData.passportPhoto = uploadResult.secure_url;
+
+        userData.passportPhoto = upload.secure_url;
       }
 
-      // Create user
+      // ✅ Create user
       const createUser = await tx.user.create({
         data: userData,
       });
 
-      return res
-        .status(200)
-        .json(jsonResponse(true, "User has been created", createUser));
+      return res.status(200).json(
+        jsonResponse(true, "User has been created", createUser)
+      );
     });
   } catch (error) {
     console.log(error);
-    return res.status(500).json(jsonResponse(false, error.message, null));
+    return res
+      .status(500)
+      .json(jsonResponse(false, error.message, null));
   }
 };
-
 //login with password (plain text)
 export const login = async (req, res) => {
   try {
