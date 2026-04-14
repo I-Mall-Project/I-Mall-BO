@@ -245,66 +245,43 @@ export const login = async (req, res) => {
 
 export const sendLoginOtp = async (req, res) => {
   try {
-    return await prisma.$transaction(async (tx) => {
+    const { email, phone } = req.body;
 
-      const user = await tx.user.findFirst({
-        where: {
-          OR: [{ email: req.body.email }, { phone: req.body.phone }],
-          isDeleted: false,
-          isActive: true,
-        },
-      });
-
-      if (!user) {
-        return res.status(404).json({
-          success: false,
-          message: "You are not registered",
-        });
-      }
-
-      if (req.body.type === "admin" && !user.roleId) {
-        return res.status(401).json({
-          success: false,
-          message: "You are not permitted!",
-        });
-      }
-
-      // 🔥 OTP generate
-      const otp = Math.floor(100000 + Math.random() * 900000).toString();
-
-      // ⏱️ 2 MIN expiry
-      const expiry = new Date(Date.now() + 2 * 60 * 1000);
-
-      // 🔥 update OTP
-      await tx.user.update({
-        where: { id: user.id },
-        data: {
-          otp,
-          otp_expiry: expiry,
-          otpCount: { increment: 1 },
-        },
-      });
-
-      if (!user.email) {
-        return res.status(400).json({
-          success: false,
-          message: "Email not found",
-        });
-      }
-
-      // 📩 send email
-      await sendEmail(
-        user.email,
-        "Login OTP",
-        `<p>Your OTP is <b>${otp}</b><br/>It will expire in 2 minutes.</p>`
-      );
-
-      return res.status(200).json({
-        success: true,
-        message: "OTP sent successfully (valid for 2 minutes)",
-      });
+    const customer = await prisma.customers.findFirst({
+      where: {
+        OR: [{ email }, { phone }],
+      },
     });
 
+    if (!customer) {
+      return res.status(404).json({
+        success: false,
+        message: "Customer not found",
+      });
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+    await prisma.customers.update({
+      where: { id: customer.id },
+      data: {
+        otp,
+        otp_expiry: new Date(Date.now() + 2 * 60 * 1000),
+      },
+    });
+
+    if (customer.email) {
+      await sendEmail(
+        customer.email,
+        "OTP Login",
+        `<p>Your OTP is <b>${otp}</b> (valid 2 minutes)</p>`
+      );
+    }
+
+    return res.json({
+      success: true,
+      message: "OTP sent successfully",
+    });
   } catch (error) {
     console.log(error);
     return res.status(500).json({
@@ -318,100 +295,55 @@ export const sendLoginOtp = async (req, res) => {
 
 export const loginWithOtp = async (req, res) => {
   try {
-    return await prisma.$transaction(async (tx) => {
+    const { email, phone, otp } = req.body;
 
-      const user = await tx.user.findFirst({
-        where: {
-          OR: [{ email: req.body.email }, { phone: req.body.phone }],
-          isDeleted: false,
-          isActive: true,
-        },
-      });
-
-      if (!user) {
-        return res.status(404).json({
-          success: false,
-          message: "You are not registered",
-        });
-      }
-
-      // ❌ OTP missing
-      if (!user.otp) {
-        return res.status(400).json({
-          success: false,
-          message: "OTP not generated",
-        });
-      }
-
-      // ⏱️ EXPIRE CHECK (2 min)
-      if (!user.otp_expiry || new Date() > new Date(user.otp_expiry)) {
-        return res.status(400).json({
-          success: false,
-          message: "OTP expired. Please request again.",
-        });
-      }
-
-      // ❌ WRONG OTP
-      if (user.otp !== req.body.otp.toString()) {
-        return res.status(400).json({
-          success: false,
-          message: "Wrong OTP",
-        });
-      }
-
-      // ✅ clear OTP after success
-      await tx.user.update({
-        where: { id: user.id },
-        data: {
-          otp: null,
-          otp_expiry: null,
-        },
-      });
-
-      // =========================
-      // TOKEN (same logic as yours)
-      // =========================
-
-      let roleModuleList = user?.roleId
-        ? await tx.roleModule.findMany({
-            where: { roleId: user.roleId, isDeleted: false },
-            include: { module: true },
-          })
-        : [];
-
-      const module_names = roleModuleList.map(r => r?.module?.name);
-
-      const roleName = user?.roleId
-        ? await tx.role.findFirst({
-            where: { id: user.roleId, isDeleted: false },
-          })
-        : { name: "customer" };
-
-      const token = jwtSign({
-        id: user.id,
-        phone: user.phone,
-        email: user.email,
-        roleId: user.roleId,
-        roleName: roleName.name,
-        moduleNames: module_names,
-      });
-
-      const { password, otp, otpCount, otp_expiry, ...others } = user;
-
-      return res
-        .cookie("accessToken", token, { httpOnly: true })
-        .status(200)
-        .json({
-          success: true,
-          message: "Logged In",
-          data: {
-            ...others,
-            accessToken: token,
-          },
-        });
-
+    const customer = await prisma.customers.findFirst({
+      where: {
+        OR: [{ email }, { phone }],
+      },
     });
 
+    if (!customer) {
+      return res.status(404).json({
+        success: false,
+        message: "Customer not found",
+      });
+    }
+
+    if (!customer.otp) {
+      return res.status(400).json({
+        success: false,
+        message: "OTP not generated",
+      });
+    }
+
+    if (new Date() > new Date(customer.otp_expiry)) {
+      return res.status(400).json({
+        success: false,
+        message: "OTP expired",
+      });
+    }
+
+    if (customer.otp !== otp) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid OTP",
+      });
+    }
+
+    await prisma.customers.update({
+      where: { id: customer.id },
+      data: {
+        otp: null,
+        otp_expiry: null,
+      },
+    });
+
+    return res.json({
+      success: true,
+      message: "Login successful",
+      customer,
+    });
   } catch (error) {
     console.log(error);
     return res.status(500).json({
@@ -420,7 +352,6 @@ export const loginWithOtp = async (req, res) => {
     });
   }
 };
-
 
 //logout
 export const logout = (req, res) => {
