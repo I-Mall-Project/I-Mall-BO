@@ -152,7 +152,6 @@ export const registerCustomer = async (req, res) => {
 
           otp: null,
           otp_expiry: null,
-          otp_count: 0,
         },
       });
 
