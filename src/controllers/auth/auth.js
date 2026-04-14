@@ -295,7 +295,15 @@ export const sendLoginOtp = async (req, res) => {
 
 export const loginWithOtp = async (req, res) => {
   try {
-    const { email, phone, otp } = req.body;
+    const { email, phone } = req.body;
+    const inputOtp = req.body.otp?.toString().trim();
+
+    if (!inputOtp) {
+      return res.status(400).json({
+        success: false,
+        message: "OTP is required",
+      });
+    }
 
     const customer = await prisma.customers.findFirst({
       where: {
@@ -310,6 +318,7 @@ export const loginWithOtp = async (req, res) => {
       });
     }
 
+    // ❌ OTP not generated
     if (!customer.otp) {
       return res.status(400).json({
         success: false,
@@ -317,20 +326,26 @@ export const loginWithOtp = async (req, res) => {
       });
     }
 
-    if (new Date() > new Date(customer.otp_expiry)) {
+    // ❌ expiry check
+    if (
+      customer.otp_expiry &&
+      new Date() > new Date(customer.otp_expiry)
+    ) {
       return res.status(400).json({
         success: false,
         message: "OTP expired",
       });
     }
 
-    if (customer.otp !== otp) {
+    // ❌ OTP compare (SAFE FIX)
+    if (String(customer.otp).trim() !== inputOtp) {
       return res.status(400).json({
         success: false,
         message: "Invalid OTP",
       });
     }
 
+    // ✅ clear OTP after success
     await prisma.customers.update({
       where: { id: customer.id },
       data: {
@@ -339,10 +354,15 @@ export const loginWithOtp = async (req, res) => {
       },
     });
 
-    return res.json({
+    return res.status(200).json({
       success: true,
       message: "Login successful",
-      customer,
+      data: {
+        id: customer.id,
+        name: customer.name,
+        phone: customer.phone,
+        email: customer.email,
+      },
     });
   } catch (error) {
     console.log(error);
