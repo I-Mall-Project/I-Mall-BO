@@ -4,7 +4,8 @@ import {
   logout,
   register,
   sendLoginOtp,
-  login
+  login,
+  registerCustomer
 } from "../../controllers/auth/auth.js";
 import { usersCreate } from "../../utils/modules.js";
 import verify from "../../utils/verifyToken.js";
@@ -30,5 +31,8 @@ router.post("/v1/auth/logout", logout);
 
 //For customer
 router.post("/v1/customer/auth/register", register);
+
+router.post("/v1/customer/auth/Customerregister", registerCustomer);
+
 
 export default router;

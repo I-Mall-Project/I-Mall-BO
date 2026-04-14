@@ -7,6 +7,60 @@ import uploadToCLoudinary from "../../utils/uploadToCloudinary.js";
 
 const module_name = "user";
 
+export const registerCustomer = async (req, res) => {
+  try {
+    const { name, phone, email } = req.body;
+
+    // ✅ Validate required fields
+    if (!name || !phone) {
+      return res.status(400).json({
+        success: false,
+        message: "Name and Phone are required",
+      });
+    }
+
+    return await prisma.$transaction(async (tx) => {
+
+      // ✅ Check duplicate customer
+      const existingCustomer = await tx.customer.findFirst({
+        where: {
+          phone,
+        },
+      });
+
+      if (existingCustomer) {
+        return res.status(409).json({
+          success: false,
+          message: "Customer already exists with this phone",
+        });
+      }
+
+      // ✅ Create customer (safe optional email handling)
+      const newCustomer = await tx.customer.create({
+        data: {
+          name,
+          phone,
+          email: email ?? null,
+        },
+      });
+
+      return res.status(201).json({
+        success: true,
+        message: "Customer registered successfully",
+        data: newCustomer,
+      });
+    });
+
+  } catch (error) {
+    console.log("REGISTER CUSTOMER ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Internal Server Error",
+    });
+  }
+};
+
 export const getUsers = async (req, res) => {
   if (req.user.roleName !== "super-admin") {
     getUsersByUser(req, res);
