@@ -10,104 +10,6 @@ import uploadToCLoudinary from "../../utils/uploadToCloudinary.js";
 const module_name = "auth";
 
 //register
-// export const register = async (req, res) => {
-//   try {
-//     return await prisma.$transaction(async (tx) => {
-//       //Check user if exists
-//       const user = await tx.user.findFirst({
-//         where: {
-//           OR: [{ email: req.body.email }, { phone: req.body.phone }],
-//           isDeleted: false,
-//         },
-//       });
-
-//       if (user) {
-//         return res
-//           .status(409)
-//           .json(jsonResponse(false, "User already exists", null));
-//       }
-
-//       //Create a new user and Hash the password
-//       // const hashedPassword = hashPassword(req.body.password);
-
-//       const {
-//         roleId,
-//         parentId,
-//         name,
-//         email,
-//         phone,
-//         address,
-//         billingAddress,
-//         country,
-//         city,
-//         postalCode,
-//         image,
-//         // password,
-//         otp,
-//         otpCount,
-//         initialPaymentAmount,
-//         initialPaymentDue,
-//         installmentTime,
-//       } = req.body;
-
-//       console.log(req.body);
-
-//       //validate input
-//       const inputValidation = validateInput(
-//         [name, email, phone, address, billingAddress, country, city],
-//         [
-//           "Name",
-//           "Email",
-//           "Phone",
-//           "Shipping Address",
-//           "Billing Address",
-//           "Country",
-//           "City",
-//         ]
-//       );
-
-//       if (inputValidation) {
-//         return res.status(400).json(jsonResponse(false, inputValidation, null));
-//       }
-
-//       //create user
-//       const createUser = await tx.user.create({
-//         data: {
-//           roleId,
-//           parentId,
-//           name,
-//           email,
-//           phone,
-//           address,
-//           billingAddress,
-//           country,
-//           city,
-//           postalCode,
-//           image: "https://cdn-icons-png.flaticon.com/512/9368/9368192.png",
-//           // password: hashedPassword,
-//           otp,
-//           otpCount,
-//           initialPaymentAmount,
-//           initialPaymentDue,
-//           installmentTime,
-//           createdBy: req?.user?.id,
-//         },
-//       });
-
-//       console.log({ createUser });
-
-//       if (createUser) {
-//         return res
-//           .status(200)
-//           .json(jsonResponse(true, "User has been created", createUser));
-//       }
-//     });
-//   } catch (error) {
-//     console.log(error);
-//     return res.status(500).json(jsonResponse(false, error, null));
-//   }
-// };
-
 
 export const register = async (req, res) => {
   try {
@@ -127,38 +29,32 @@ export const register = async (req, res) => {
         otpCount,
       } = req.body;
 
-      // ✅ Validate required fields (only name + phone)
+      // ✅ Only required fields
       const inputValidation = validateInput(
         [name, phone],
         ["Name", "Phone"]
       );
 
       if (inputValidation) {
-        return res.status(400).json(jsonResponse(false, inputValidation, null));
+        return res
+          .status(400)
+          .json(jsonResponse(false, inputValidation, null));
       }
 
-      // ✅ Build dynamic OR condition (IMPORTANT FIX)
-      const conditions = [];
+      // ✅ SAFE existing user check (NO null issue)
+      const orConditions = [];
 
       if (email) {
-        conditions.push({ email });
+        orConditions.push({ email });
       }
 
       if (phone) {
-        conditions.push({ phone });
+        orConditions.push({ phone });
       }
 
-      // Safety check
-      if (conditions.length === 0) {
-        return res
-          .status(400)
-          .json(jsonResponse(false, "Phone is required", null));
-      }
-
-      // ✅ Check if user exists
       const existingUser = await tx.user.findFirst({
         where: {
-          OR: conditions,
+          OR: orConditions.length > 0 ? orConditions : [{ phone }],
           isDeleted: false,
         },
       });
@@ -169,24 +65,24 @@ export const register = async (req, res) => {
           .json(jsonResponse(false, "User already exists", null));
       }
 
-      // ✅ Prepare user data (avoid null issue)
+      // ✅ SAFE user payload (NO missing field error)
       const userData = {
-        roleId,
-        parentId,
+        roleId: roleId ?? null,
+        parentId: parentId ?? null,
         name,
         phone,
-        ...(email && { email }), // only add if exists
-        ...(presentAddress && { presentAddress }),
-        ...(permanentAddress && { permanentAddress }),
-        ...(nidNo && { nidNo }),
-        ...(password && { password }),
-        ...(otp && { otp }),
-        ...(otpCount && { otpCount }),
-        createdBy: req?.user?.id,
+        email: email ?? null,
+        presentAddress: presentAddress ?? null,
+        permanentAddress: permanentAddress ?? null,
+        nidNo: nidNo ?? null,
+        password: password ?? null,
+        otp: otp ?? null,
+        otpCount: otpCount ?? 0,
+        createdBy: req?.user?.id ?? null,
       };
 
       // ✅ NID attachments upload
-      if (req.files?.nidAttachment?.length > 0) {
+      if (req.files?.nidAttachment?.length) {
         const uploads = await Promise.all(
           req.files.nidAttachment.map(
             (file) =>
@@ -199,14 +95,13 @@ export const register = async (req, res) => {
           )
         );
 
-        userData.nidAttachment = uploads.map((r) => {
-          if (!r?.secure_url) throw new Error("NID upload failed");
-          return r.secure_url;
-        });
+        userData.nidAttachment = uploads
+          .filter((r) => r?.secure_url)
+          .map((r) => r.secure_url);
       }
 
       // ✅ Passport photo upload
-      if (req.files?.passportPhoto?.length > 0) {
+      if (req.files?.passportPhoto?.length) {
         const upload = await new Promise((resolve, reject) => {
           uploadToCLoudinary(
             req.files.passportPhoto[0],
@@ -218,11 +113,9 @@ export const register = async (req, res) => {
           );
         });
 
-        if (!upload?.secure_url) {
-          throw new Error("Passport photo upload failed");
+        if (upload?.secure_url) {
+          userData.passportPhoto = upload.secure_url;
         }
-
-        userData.passportPhoto = upload.secure_url;
       }
 
       // ✅ Create user
@@ -234,6 +127,7 @@ export const register = async (req, res) => {
         jsonResponse(true, "User has been created", createUser)
       );
     });
+
   } catch (error) {
     console.log(error);
     return res
@@ -241,6 +135,8 @@ export const register = async (req, res) => {
       .json(jsonResponse(false, error.message, null));
   }
 };
+
+
 //login with password (plain text)
 export const login = async (req, res) => {
   try {
