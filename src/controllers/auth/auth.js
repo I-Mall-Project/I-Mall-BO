@@ -131,6 +131,7 @@ export const registerCustomer = async (req, res) => {
 
     return await prisma.$transaction(async (tx) => {
 
+      // ✅ check existing customer
       const existingCustomer = await tx.customers.findFirst({
         where: { phone },
       });
@@ -142,11 +143,16 @@ export const registerCustomer = async (req, res) => {
         });
       }
 
+      // ✅ create customer (OTP fields included but empty)
       const newCustomer = await tx.customers.create({
         data: {
           name,
           phone,
           email: email ?? null,
+
+          otp: null,
+          otp_expiry: null,
+          otp_count: 0,
         },
       });
 
@@ -165,9 +171,6 @@ export const registerCustomer = async (req, res) => {
     });
   }
 };
-
-
-
 
 
 
@@ -254,56 +257,61 @@ export const sendLoginOtp = async (req, res) => {
       });
 
       if (!user) {
-        return res
-          .status(404)
-          .json(jsonResponse(false, "You are not registered", null));
+        return res.status(404).json({
+          success: false,
+          message: "You are not registered",
+        });
       }
 
       if (req.body.type === "admin" && !user.roleId) {
-        return res
-          .status(401)
-          .json(jsonResponse(false, "You are not permitted!", null));
+        return res.status(401).json({
+          success: false,
+          message: "You are not permitted!",
+        });
       }
 
-      // ✅ OTP generate (STRING)
-      const sixDigitOtp = Math.floor(100000 + Math.random() * 900000).toString();
+      // 🔥 OTP generate
+      const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
-      // ✅ update OTP
-      const updateOtp = await tx.user.update({
+      // ⏱️ 2 MIN expiry
+      const expiry = new Date(Date.now() + 2 * 60 * 1000);
+
+      // 🔥 update OTP
+      await tx.user.update({
         where: { id: user.id },
         data: {
-          otp: sixDigitOtp,
+          otp,
+          otp_expiry: expiry,
           otpCount: { increment: 1 },
         },
       });
 
-      if (!updateOtp) {
-        return res
-          .status(500)
-          .json(jsonResponse(false, "OTP update failed", null));
-      }
-
       if (!user.email) {
-        return res
-          .status(400)
-          .json(jsonResponse(false, "Email is not registered", null));
+        return res.status(400).json({
+          success: false,
+          message: "Email not found",
+        });
       }
 
-      // ✅ send email
+      // 📩 send email
       await sendEmail(
         user.email,
-        "OTP Login",
-        `<p>Your OTP is <b>${sixDigitOtp}</b></p>`
+        "Login OTP",
+        `<p>Your OTP is <b>${otp}</b><br/>It will expire in 2 minutes.</p>`
       );
 
-      return res
-        .status(200)
-        .json(jsonResponse(true, "OTP sent successfully", null));
+      return res.status(200).json({
+        success: true,
+        message: "OTP sent successfully (valid for 2 minutes)",
+      });
     });
 
   } catch (error) {
     console.log(error);
-    return res.status(500).json(jsonResponse(false, error.message, null));
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
   }
 };
 
@@ -322,22 +330,34 @@ export const loginWithOtp = async (req, res) => {
       });
 
       if (!user) {
-        return res
-          .status(404)
-          .json(jsonResponse(false, "You are not registered", null));
+        return res.status(404).json({
+          success: false,
+          message: "You are not registered",
+        });
       }
 
+      // ❌ OTP missing
       if (!user.otp) {
-        return res
-          .status(400)
-          .json(jsonResponse(false, "OTP not generated", null));
+        return res.status(400).json({
+          success: false,
+          message: "OTP not generated",
+        });
       }
 
-      // ✅ OTP match (STRING compare)
+      // ⏱️ EXPIRE CHECK (2 min)
+      if (!user.otp_expiry || new Date() > new Date(user.otp_expiry)) {
+        return res.status(400).json({
+          success: false,
+          message: "OTP expired. Please request again.",
+        });
+      }
+
+      // ❌ WRONG OTP
       if (user.otp !== req.body.otp.toString()) {
-        return res
-          .status(400)
-          .json(jsonResponse(false, "Wrong OTP", null));
+        return res.status(400).json({
+          success: false,
+          message: "Wrong OTP",
+        });
       }
 
       // ✅ clear OTP after success
@@ -345,11 +365,12 @@ export const loginWithOtp = async (req, res) => {
         where: { id: user.id },
         data: {
           otp: null,
+          otp_expiry: null,
         },
       });
 
       // =========================
-      // ROLE + MODULE (your original logic)
+      // TOKEN (same logic as yours)
       // =========================
 
       let roleModuleList = user?.roleId
@@ -369,35 +390,37 @@ export const loginWithOtp = async (req, res) => {
 
       const token = jwtSign({
         id: user.id,
-        parentId: user.parentId ? user.parentId : user.id,
         phone: user.phone,
         email: user.email,
         roleId: user.roleId,
         roleName: roleName.name,
-        isActive: user.isActive,
         moduleNames: module_names,
       });
 
-      const { password, otp, otpCount, ...others } = user;
+      const { password, otp, otpCount, otp_expiry, ...others } = user;
 
       return res
         .cookie("accessToken", token, { httpOnly: true })
         .status(200)
-        .json(
-          jsonResponse(true, "Logged In", {
+        .json({
+          success: true,
+          message: "Logged In",
+          data: {
             ...others,
             accessToken: token,
-          })
-        );
+          },
+        });
 
     });
 
   } catch (error) {
     console.log(error);
-    return res.status(500).json(jsonResponse(false, error.message, null));
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
   }
 };
-
 
 
 //logout
