@@ -118,12 +118,10 @@ export const register = async (req, res) => {
   }
 };
 
-
 export const registerCustomer = async (req, res) => {
   try {
     const { name, phone, email } = req.body;
 
-    // ✅ Validate required fields
     if (!name || !phone) {
       return res.status(400).json({
         success: false,
@@ -133,22 +131,18 @@ export const registerCustomer = async (req, res) => {
 
     return await prisma.$transaction(async (tx) => {
 
-      // ✅ Check duplicate customer
-      const existingCustomer = await tx.customer.findFirst({
-        where: {
-          phone,
-        },
+      const existingCustomer = await tx.customers.findFirst({
+        where: { phone },
       });
 
       if (existingCustomer) {
         return res.status(409).json({
           success: false,
-          message: "Customer already exists with this phone",
+          message: "Customer already exists",
         });
       }
 
-      // ✅ Create customer (safe optional email handling)
-      const newCustomer = await tx.customer.create({
+      const newCustomer = await tx.customers.create({
         data: {
           name,
           phone,
@@ -158,23 +152,19 @@ export const registerCustomer = async (req, res) => {
 
       return res.status(201).json({
         success: true,
-        message: "Customer registered successfully",
+        message: "Customer created successfully",
         data: newCustomer,
       });
     });
 
   } catch (error) {
-    console.log("REGISTER CUSTOMER ERROR:", error);
-
+    console.log(error);
     return res.status(500).json({
       success: false,
-      message: error.message || "Internal Server Error",
+      message: error.message,
     });
   }
 };
-
-
-
 
 
 
