@@ -245,7 +245,7 @@ export const login = async (req, res) => {
 export const sendLoginOtp = async (req, res) => {
   try {
     return await prisma.$transaction(async (tx) => {
-      //login with phone or email
+
       const user = await tx.user.findFirst({
         where: {
           OR: [{ email: req.body.email }, { phone: req.body.phone }],
@@ -254,112 +254,57 @@ export const sendLoginOtp = async (req, res) => {
         },
       });
 
-      if (!user)
+      if (!user) {
         return res
           .status(404)
           .json(jsonResponse(false, "You are not registered", null));
-
-      if (user.isActive === false) {
-        return res
-          .status(401)
-          .json(jsonResponse(false, "You are not authenticated!", null));
       }
 
-      if (req.body.type === "admin" && user?.roleId === null) {
+      if (req.body.type === "admin" && !user.roleId) {
         return res
           .status(401)
           .json(jsonResponse(false, "You are not permitted!", null));
       }
 
-      //update user otp
-      const sixDigitOtp = Math.floor(100000 + Math.random() * 900000);
-      let updateOtp;
+      // ✅ OTP generate
+      const sixDigitOtp = Math.floor(100000 + Math.random() * 900000).toString();
 
-      if (!user?.otp) {
-        updateOtp = await prisma.user.update({
-          where: { id: user.id },
-          data: {
-            otp: sixDigitOtp,
-            otpCount: user.otpCount + 1,
-          },
-        });
+      // ✅ update OTP every time
+      const updateOtp = await tx.user.update({
+        where: { id: user.id },
+        data: {
+          otp: sixDigitOtp,
+          otpCount: { increment: 1 },
+        },
+      });
 
-        if (!updateOtp)
-          return res
-            .status(404)
-            .json(
-              jsonResponse(false, "Something went wrong. Try again.", null)
-            );
+      if (!updateOtp) {
+        return res
+          .status(500)
+          .json(jsonResponse(false, "OTP update failed", null));
       }
 
-      // console.log(user.email);
-
-      if (!user.email || user.email.trim() === "") {
-        res
+      if (!user.email) {
+        return res
           .status(400)
           .json(jsonResponse(false, "Email is not registered", null));
       }
 
-      // await sendEmail(
-      //   "user.email@email.com",
-      //   "Ecommerce OTP",
-      //   `<p>Your otp is ${updateOtp?.otp}</p>`
-      // );
-
-      // if (!updateOtp?.otp) {
-      const emailGenerate = await sendEmail(
-        updateOtp?.email ?? user.email,
-        "Strike Shoes OTP",
-        `<p>Your otp is ${updateOtp?.otp ?? user?.otp}</p>`
+      // ✅ send email
+      await sendEmail(
+        user.email,
+        "I-Mall OTP",
+        `<p>Your OTP is <b>${sixDigitOtp}</b></p>`
       );
-      // }
 
-      await tx.user.findFirst({
-        where: {
-          OR: [{ email: req.body.email }, { phone: req.body.phone }],
-          isDeleted: false,
-          isActive: true,
-        },
-      });
-
-      // console.log({ emailGenerate });
-
-      // if (emailGenerate) {
-      res
+      return res
         .status(200)
-        .json(jsonResponse(true, "Otp is sent to your mail", null));
-      // }
-
-      // if (user.email && user.email.trim() !== "") {
-      //   const promise1 = new Promise((resolve, reject) => {
-      //     resolve(
-      //       sendEmail(
-      //         user.email,
-      //         "Ecommerce OTP",
-      //         `<p>Your otp is ${sixDigitOtp}</p>`
-      //       )
-      //     );
-      //   });
-      //   // const send_email = sendEmail(
-      //   //   user.email,
-      //   //   "Ecommerce OTP",
-      //   //   `<p>Your otp is ${sixDigitOtp}</p>`
-      //   // );
-
-      //   promise1
-      //     .then(() => {
-      //       res
-      //         .status(200)
-      //         .json(jsonResponse(true, "Otp is sent to your mail", null));
-      //     })
-      //     .catch((error) => {
-      //       console.log(error);
-      //     });
-      // }
+        .json(jsonResponse(true, "OTP sent successfully", null));
     });
+
   } catch (error) {
     console.log(error);
-    return res.status(500).json(jsonResponse(false, error, null));
+    return res.status(500).json(jsonResponse(false, error.message, null));
   }
 };
 
@@ -367,7 +312,7 @@ export const sendLoginOtp = async (req, res) => {
 export const loginWithOtp = async (req, res) => {
   try {
     return await prisma.$transaction(async (tx) => {
-      //login with otp
+
       const user = await tx.user.findFirst({
         where: {
           OR: [{ email: req.body.email }, { phone: req.body.phone }],
@@ -376,93 +321,86 @@ export const loginWithOtp = async (req, res) => {
         },
       });
 
-      if (!user)
+      if (!user) {
         return res
           .status(404)
           .json(jsonResponse(false, "You are not registered", null));
-
-      if (user.isActive === false) {
-        return res
-          .status(401)
-          .json(jsonResponse(false, "You are not authenticated!", null));
       }
 
-      //match user otp and login
-      if (user.otp !== null && user.otp !== "") {
-        if (user.otp === req.body.otp) {
-          const updateOtp = await prisma.user.update({
-            where: { id: user.id },
-            data: {
-              otp: null,
-            },
-          });
-
-          if (!updateOtp)
-            return res
-              .status(500)
-              .json(
-                jsonResponse(false, "Something went wrong. Try again.", null)
-              );
-
-          //get modules for logged in user
-          let roleModuleList = [];
-          roleModuleList = user?.roleId
-            ? await tx.roleModule.findMany({
-                where: { roleId: user.roleId, isDeleted: false },
-                include: { module: true },
-              })
-            : [];
-
-          const roleModuleList_length = roleModuleList.length;
-
-          const roleName = user?.roleId
-            ? await tx.role.findFirst({
-                where: { id: user.roleId, isDeleted: false },
-              })
-            : { name: "customer" };
-
-          const module_names = [];
-
-          for (let i = 0; i < roleModuleList_length; i++) {
-            module_names.push(roleModuleList[i]?.module?.name);
-          }
-
-          const token = jwtSign({
-            id: user.id,
-            parentId: user.parentId ? user.parentId : user.id,
-            phone: user.phone,
-            email: user.email,
-            roleId: user.roleId,
-            roleName: roleName.name,
-            isActive: user.isActive,
-            moduleNames: module_names,
-          });
-
-          const { password, otp, otpCount, ...others } = user;
-
-          res
-            .cookie("accessToken", token, {
-              httpOnly: true,
-            })
-            .status(200)
-            .json(
-              jsonResponse(true, "Logged In", { ...others, accessToken: token })
-            );
-        } else {
-          return res.status(400).json(jsonResponse(false, "Wrong OTP", null));
-        }
-      } else {
+      if (!user.otp) {
         return res
           .status(400)
-          .json(jsonResponse(false, "You didn't receive any OTP yet", null));
+          .json(jsonResponse(false, "OTP not generated", null));
       }
+
+      // ✅ OTP match
+      if (user.otp !== req.body.otp.toString()) {
+        return res
+          .status(400)
+          .json(jsonResponse(false, "Wrong OTP", null));
+      }
+
+      // ✅ clear OTP after success
+      const updateUser = await tx.user.update({
+        where: { id: user.id },
+        data: {
+          otp: null,
+        },
+      });
+
+      if (!updateUser) {
+        return res
+          .status(500)
+          .json(jsonResponse(false, "Login failed", null));
+      }
+
+      // =========================
+      // TOKEN GENERATION (same as yours)
+      // =========================
+
+      let roleModuleList = user?.roleId
+        ? await tx.roleModule.findMany({
+            where: { roleId: user.roleId, isDeleted: false },
+            include: { module: true },
+          })
+        : [];
+
+      const module_names = roleModuleList.map(r => r?.module?.name);
+
+      const roleName = user?.roleId
+        ? await tx.role.findFirst({
+            where: { id: user.roleId, isDeleted: false },
+          })
+        : { name: "customer" };
+
+      const token = jwtSign({
+        id: user.id,
+        phone: user.phone,
+        email: user.email,
+        roleId: user.roleId,
+        roleName: roleName.name,
+        moduleNames: module_names,
+      });
+
+      const { password, otp, otpCount, ...others } = user;
+
+      return res
+        .cookie("accessToken", token, { httpOnly: true })
+        .status(200)
+        .json(
+          jsonResponse(true, "Logged In", {
+            ...others,
+            accessToken: token,
+          })
+        );
+
     });
+
   } catch (error) {
     console.log(error);
-    return res.status(500).json(jsonResponse(false, error, null));
+    return res.status(500).json(jsonResponse(false, error.message, null));
   }
 };
-
 //logout
 export const logout = (req, res) => {
   res
