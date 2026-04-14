@@ -143,8 +143,8 @@ export const register = async (req, res) => {
 
       // Validate required fields
       const inputValidation = validateInput(
-        [name, email, phone, presentAddress, permanentAddress, nidNo, password],
-        ["Name", "Email", "Phone", "Present Address", "Permanent Address", "NID No", "Password"]
+       [name, phone],
+  ["Name", "Phone"]
       );
       if (inputValidation) {
         return res.status(400).json(jsonResponse(false, inputValidation, null));
