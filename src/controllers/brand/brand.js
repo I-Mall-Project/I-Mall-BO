@@ -1229,31 +1229,41 @@ export const getMyBrands = async (req, res) => {
  
 export const getMyBrandOrders = async (req, res) => {
   try {
-   const brandIds = await getOwnerBrandIds(req.user.id);
-    if (brandIds.length === 0)
-      return res.status(200).json(jsonResponse(true, "No orders found", []));
+    const isSuperAdmin = req.user.role === "SUPER_ADMIN";
+    const brandIds = await getOwnerBrandIds(req.user.id);
 
-    const { brandId, status, from, to, page = 1, limit = 20, orderType } = req.query; // ← orderType যোগ
+    const { brandId, status, from, to, page = 1, limit = 20, orderType } = req.query;
 
     const where = {
       isDeleted: false,
       orderItems: {
         some: {
-          brandId: brandId ? brandId : { in: brandIds },
+          brandId: brandId
+            ? brandId
+            : isSuperAdmin
+            ? { not: null } // সব brand allow
+            : { in: brandIds },
         },
       },
       ...(status && { status }),
-      ...(orderType && { orderType }),   // ← এটা add করুন
+      ...(orderType && { orderType }),
       ...(from && to && {
         createdAt: { gte: new Date(from), lte: new Date(to) },
       }),
     };
+
     const [orders, total] = await Promise.all([
       prisma.order.findMany({
         where,
         include: {
           orderItems: {
-            where: { brandId: brandId ? brandId : { in: brandIds } },
+            where: {
+              brandId: brandId
+                ? brandId
+                : isSuperAdmin
+                ? { not: null }
+                : { in: brandIds },
+            },
           },
         },
         orderBy: { createdAt: "desc" },
@@ -1262,8 +1272,14 @@ export const getMyBrandOrders = async (req, res) => {
       }),
       prisma.order.count({ where }),
     ]);
- 
-    return res.status(200).json(jsonResponse(true, `${orders.length} orders found`, { orders, total, page: parseInt(page) }));
+
+    return res.status(200).json(
+      jsonResponse(true, `${orders.length} orders found`, {
+        orders,
+        total,
+        page: parseInt(page),
+      })
+    );
   } catch (error) {
     console.log(error);
     return res.status(500).json(jsonResponse(false, error.message, null));
