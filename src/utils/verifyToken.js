@@ -1,85 +1,83 @@
 import jwt from "jsonwebtoken";
-import arrayEquals from "./arrayEquals.js";
 import jsonResponse from "./jsonResponse.js";
 import prisma from "./prismaClient.js";
 
-const verify = (req, res, next) => {
-  const cookiesToken = req.cookies.token; // ✅ FIXED
-  const authHeader = req.headers.authorization;
+const verify = async (req, res, next) => {
+  try {
+    const cookiesToken = req.cookies?.token;
+    const authHeader = req.headers.authorization;
 
-  const token = authHeader
-    ? authHeader.split(" ")[1]
-    : cookiesToken;
+    const token = authHeader
+      ? authHeader.split(" ")[1]
+      : cookiesToken;
 
-  if (!token) {
-    return res
-      .clearCookie("token", { secure: true, sameSite: "none" })
-      .status(401)
-      .json(jsonResponse(false, "You are not authenticated!", null));
-  }
-
-  jwt.verify(token, process.env.JWT_SECRET, async (err, decoded) => {
-    if (err || !decoded) {
+    if (!token) {
       return res
-        .status(403)
-        .json(jsonResponse(false, "Token is not valid!", null));
+        .clearCookie("token", { secure: true, sameSite: "none" })
+        .status(401)
+        .json(jsonResponse(false, "You are not authenticated!", null));
     }
 
-    try {
-      req.user = decoded;
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-      // =========================
-      // ✅ ADMIN USER
-      // =========================
-      if (decoded.id) {
-        const activeUser = await prisma.user.findFirst({
-          where: { id: decoded.id, isDeleted: false },
-        });
+    // =========================
+    // ✅ CUSTOMER
+    // =========================
+    if (decoded.type === "customer") {
+      const customer = await prisma.customers.findFirst({
+        where: { id: decoded.id },
+      });
 
-        if (!activeUser) {
-          return res
-            .clearCookie("token", { secure: true, sameSite: "none" })
-            .status(401)
-            .json(jsonResponse(false, "Please login again", null));
-        }
-
-        req.user.type = "admin";
-      }
-
-      // =========================
-      // ✅ CUSTOMER
-      // =========================
-      else if (decoded.phone) {
-        const customer = await prisma.customers.findFirst({
-          where: { phone: decoded.phone },
-        });
-
-        if (!customer) {
-          return res
-            .clearCookie("token", { secure: true, sameSite: "none" })
-            .status(401)
-            .json(jsonResponse(false, "Customer not found", null));
-        }
-
-        req.user = {
-          id: customer.id,
-          phone: customer.phone,
-          name: customer.name,
-          type: "customer",
-        };
-      } else {
+      if (!customer) {
         return res
+          .clearCookie("token", { secure: true, sameSite: "none" })
           .status(401)
-          .json(jsonResponse(false, "Invalid token", null));
+          .json(jsonResponse(false, "Customer not found", null));
       }
 
-      next();
-    } catch (error) {
-      return res
-        .status(500)
-        .json(jsonResponse(false, "Server error", null));
+      req.user = {
+        id: customer.id,
+        phone: customer.phone,
+        name: customer.name,
+        type: "customer",
+      };
     }
-  });
+
+    // =========================
+    // ✅ ADMIN
+    // =========================
+    else if (decoded.type === "admin") {
+      const activeUser = await prisma.user.findFirst({
+        where: { id: decoded.id, isDeleted: false },
+      });
+
+      if (!activeUser) {
+        return res
+          .clearCookie("token", { secure: true, sameSite: "none" })
+          .status(401)
+          .json(jsonResponse(false, "Please login again", null));
+      }
+
+      req.user = { ...decoded, type: "admin" };
+    }
+
+    // =========================
+    // ❌ INVALID TOKEN
+    // =========================
+    else {
+      return res
+        .status(401)
+        .json(jsonResponse(false, "Invalid token type", null));
+    }
+
+    next();
+  } catch (err) {
+    console.log("JWT ERROR:", err.message);
+
+    return res
+      .status(401)
+      .json(jsonResponse(false, "Please login again", null));
+  }
 };
 
 export default verify;
