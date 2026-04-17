@@ -5,8 +5,6 @@ import jwtSign from "../../utils/jwtSign.js";
 import prisma from "../../utils/prismaClient.js";
 import validateInput from "../../utils/validateInput.js";
 import uploadToCLoudinary from "../../utils/uploadToCloudinary.js";
-import jwt from "jsonwebtoken";
-
 
 
 const module_name = "auth";
@@ -174,106 +172,6 @@ export const registerCustomer = async (req, res) => {
 };
 
 
-export const getCustomerByPhone = async (req, res) => {
-  try {
-    const { phone } = req.params;
-
-    if (!phone) {
-      return res.status(400).json({
-        success: false,
-        message: "Phone number is required",
-      });
-    }
-
-    const customer = await prisma.customers.findFirst({
-      where: { phone },
-    });
-
-    if (!customer) {
-      return res.status(404).json({
-        success: false,
-        message: "Customer not found",
-        data: null,
-      });
-    }
-
-    return res.status(200).json({
-      success: true,
-      message: "Customer fetched successfully",
-      data: customer,
-    });
-
-  } catch (error) {
-    console.log(error);
-    return res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
-};
-
-
-export const getAllCustomers = async (req, res) => {
-  try {
-    const customers = await prisma.customers.findMany({
-      orderBy: { createdAt: "desc" },
-    });
-
-    return res.status(200).json({
-      success: true,
-      message: `${customers.length} customers found`,
-      data: customers,
-    });
-
-  } catch (error) {
-    console.log(error);
-    return res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
-};
-
-
-export const searchCustomers = async (req, res) => {
-  try {
-    const { search } = req.query;
-
-    const customers = await prisma.customers.findMany({
-      where: {
-        OR: [
-          {
-            phone: {
-              contains: search,
-            },
-          },
-          {
-            name: {
-              contains: search,
-              mode: "insensitive",
-            },
-          },
-        ],
-      },
-      take: 10,
-    });
-
-    return res.status(200).json({
-      success: true,
-      message: "Search result",
-      data: customers,
-    });
-
-  } catch (error) {
-    console.log(error);
-    return res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
-};
-
-
 
 //login with password (plain text)
 export const login = async (req, res) => {
@@ -420,6 +318,7 @@ export const loginWithOtp = async (req, res) => {
       });
     }
 
+    // ❌ OTP not generated
     if (!customer.otp) {
       return res.status(400).json({
         success: false,
@@ -427,6 +326,7 @@ export const loginWithOtp = async (req, res) => {
       });
     }
 
+    // ❌ expiry check
     if (
       customer.otp_expiry &&
       new Date() > new Date(customer.otp_expiry)
@@ -437,6 +337,7 @@ export const loginWithOtp = async (req, res) => {
       });
     }
 
+    // ❌ OTP compare (SAFE FIX)
     if (String(customer.otp).trim() !== inputOtp) {
       return res.status(400).json({
         success: false,
@@ -444,7 +345,7 @@ export const loginWithOtp = async (req, res) => {
       });
     }
 
-    // ✅ clear OTP
+    // ✅ clear OTP after success
     await prisma.customers.update({
       where: { id: customer.id },
       data: {
@@ -453,25 +354,16 @@ export const loginWithOtp = async (req, res) => {
       },
     });
 
-    // ✅ generate JWT
-    const token = jwt.sign(
-      { id: customer.id },
-      process.env.JWT_SECRET,
-      { expiresIn: "7d" }
-    );
-
     return res.status(200).json({
       success: true,
       message: "Login successful",
       data: {
-        accessToken: token,
         id: customer.id,
         name: customer.name,
         phone: customer.phone,
         email: customer.email,
       },
     });
-
   } catch (error) {
     console.log(error);
     return res.status(500).json({
