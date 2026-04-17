@@ -5,6 +5,8 @@ import jwtSign from "../../utils/jwtSign.js";
 import prisma from "../../utils/prismaClient.js";
 import validateInput from "../../utils/validateInput.js";
 import uploadToCLoudinary from "../../utils/uploadToCloudinary.js";
+import jwt from "jsonwebtoken";
+
 
 
 const module_name = "auth";
@@ -405,7 +407,6 @@ export const loginWithOtp = async (req, res) => {
       });
     }
 
-    // ✅ find customer
     const customer = await prisma.customers.findFirst({
       where: {
         OR: [{ email }, { phone }],
@@ -419,7 +420,6 @@ export const loginWithOtp = async (req, res) => {
       });
     }
 
-    // ❌ OTP not generated
     if (!customer.otp) {
       return res.status(400).json({
         success: false,
@@ -427,7 +427,6 @@ export const loginWithOtp = async (req, res) => {
       });
     }
 
-    // ❌ expiry check
     if (
       customer.otp_expiry &&
       new Date() > new Date(customer.otp_expiry)
@@ -438,7 +437,6 @@ export const loginWithOtp = async (req, res) => {
       });
     }
 
-    // ❌ OTP mismatch
     if (String(customer.otp).trim() !== inputOtp) {
       return res.status(400).json({
         success: false,
@@ -455,35 +453,25 @@ export const loginWithOtp = async (req, res) => {
       },
     });
 
-    // 🔥 ✅ CREATE JWT TOKEN (MOST IMPORTANT)
+    // ✅ generate JWT
     const token = jwt.sign(
-      {
-        phone: customer.phone, // 🔥 customer identify
-        role: "customer",
-      },
+      { id: customer.id },
       process.env.JWT_SECRET,
       { expiresIn: "7d" }
     );
 
-    // 🔥 ✅ SET COOKIE
-    res.cookie("token", token, {
-      httpOnly: false, // frontend access লাগবে
-      secure: true,
-      sameSite: "none",
-    });
-
-    // ✅ response
     return res.status(200).json({
       success: true,
       message: "Login successful",
       data: {
+        accessToken: token,
         id: customer.id,
         name: customer.name,
         phone: customer.phone,
         email: customer.email,
-        accessToken: token, // 🔥 frontend এর জন্য
       },
     });
+
   } catch (error) {
     console.log(error);
     return res.status(500).json({
