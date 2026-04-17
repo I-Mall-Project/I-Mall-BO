@@ -4,11 +4,8 @@ import jsonResponse from "./jsonResponse.js";
 import prisma from "./prismaClient.js";
 
 const verify = (req, res, next) => {
-  const cookiesToken = req.cookies.accessToken;
-
-  // ✅ FIX: support BOTH header
-  const authHeader =
-    req.headers.authorization || req.headers.token;
+  const cookiesToken = req.cookies.token; // ✅ FIXED
+  const authHeader = req.headers.authorization;
 
   const token = authHeader
     ? authHeader.split(" ")[1]
@@ -16,7 +13,7 @@ const verify = (req, res, next) => {
 
   if (!token) {
     return res
-      .clearCookie("accessToken", { secure: true, sameSite: "none" })
+      .clearCookie("token", { secure: true, sameSite: "none" })
       .status(401)
       .json(jsonResponse(false, "You are not authenticated!", null));
   }
@@ -32,7 +29,7 @@ const verify = (req, res, next) => {
       req.user = decoded;
 
       // =========================
-      // ✅ ADMIN
+      // ✅ ADMIN USER
       // =========================
       if (decoded.id) {
         const activeUser = await prisma.user.findFirst({
@@ -40,9 +37,10 @@ const verify = (req, res, next) => {
         });
 
         if (!activeUser) {
-          return res.status(401).json(
-            jsonResponse(false, "Please login again", null)
-          );
+          return res
+            .clearCookie("token", { secure: true, sameSite: "none" })
+            .status(401)
+            .json(jsonResponse(false, "Please login again", null));
         }
 
         req.user.type = "admin";
@@ -57,9 +55,10 @@ const verify = (req, res, next) => {
         });
 
         if (!customer) {
-          return res.status(401).json(
-            jsonResponse(false, "Customer not found", null)
-          );
+          return res
+            .clearCookie("token", { secure: true, sameSite: "none" })
+            .status(401)
+            .json(jsonResponse(false, "Customer not found", null));
         }
 
         req.user = {
@@ -68,12 +67,10 @@ const verify = (req, res, next) => {
           name: customer.name,
           type: "customer",
         };
-      }
-
-      else {
+      } else {
         return res
           .status(401)
-          .json(jsonResponse(false, "Invalid token payload", null));
+          .json(jsonResponse(false, "Invalid token", null));
       }
 
       next();

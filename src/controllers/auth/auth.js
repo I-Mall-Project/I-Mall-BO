@@ -405,6 +405,7 @@ export const loginWithOtp = async (req, res) => {
       });
     }
 
+    // ✅ find customer
     const customer = await prisma.customers.findFirst({
       where: {
         OR: [{ email }, { phone }],
@@ -437,7 +438,7 @@ export const loginWithOtp = async (req, res) => {
       });
     }
 
-    // ❌ OTP compare (SAFE FIX)
+    // ❌ OTP mismatch
     if (String(customer.otp).trim() !== inputOtp) {
       return res.status(400).json({
         success: false,
@@ -445,7 +446,7 @@ export const loginWithOtp = async (req, res) => {
       });
     }
 
-    // ✅ clear OTP after success
+    // ✅ clear OTP
     await prisma.customers.update({
       where: { id: customer.id },
       data: {
@@ -454,6 +455,24 @@ export const loginWithOtp = async (req, res) => {
       },
     });
 
+    // 🔥 ✅ CREATE JWT TOKEN (MOST IMPORTANT)
+    const token = jwt.sign(
+      {
+        phone: customer.phone, // 🔥 customer identify
+        role: "customer",
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+
+    // 🔥 ✅ SET COOKIE
+    res.cookie("token", token, {
+      httpOnly: false, // frontend access লাগবে
+      secure: true,
+      sameSite: "none",
+    });
+
+    // ✅ response
     return res.status(200).json({
       success: true,
       message: "Login successful",
@@ -462,6 +481,7 @@ export const loginWithOtp = async (req, res) => {
         name: customer.name,
         phone: customer.phone,
         email: customer.email,
+        accessToken: token, // 🔥 frontend এর জন্য
       },
     });
   } catch (error) {
