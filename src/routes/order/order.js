@@ -23,7 +23,8 @@ import {
   updateRiderLocationAndStatus,
   getRiderStatus,
   getDeliveryCharge,
-  getInvoiceData
+  getInvoiceData,
+  customerOrderAnalysis
 } from "../../controllers/order/order.js";
 import verify from "../../utils/verifyToken.js";
 
@@ -50,6 +51,7 @@ router.put("/v1/orders/delivery-man/:id/status", verify, updateOrderStatusByDeli
 // ================== Generic Order Routes (`:id` সবার শেষে) ==================
 router.get("/v1/orders", verify, getOrders);
 router.get("/v1/orders/user/:id", verify, getOrdersByUser);
+router.get("/v1/orders/customer-analysis/:phone", verify, customerOrderAnalysis);
 router.get("/v1/orders/:id", verify, getOrder);
 router.put("/v1/orders/:id", updateOrder);
 router.delete("/v1/orders/:id", verify, deleteOrder);

@@ -148,29 +148,6 @@ export const createProduct = async (req, res) => {
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 //send product email
 export const sendProductEmail = async (req, res) => {
   try {

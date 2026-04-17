@@ -2433,3 +2433,136 @@ export const getRevenueAnalysis = async (req, res) => {
     return res.status(500).json(jsonResponse(false, error.message, null));
   }
 };
+
+
+
+export const customerOrderAnalysis = async (req, res) => {
+  try {
+    const phone = req.params.phone;
+
+    if (!phone) {
+      return res.status(400).json(jsonResponse(false, "Phone is required", null));
+    }
+
+    // 🔥 1. সব order (online + offline same table থেকে)
+    const orders = await prisma.order.findMany({
+      where: {
+        customerPhone: phone,
+        isDeleted: false,
+      },
+      include: {
+        orderItems: true,
+
+        // ✅ delivery man info
+        User_Order_deliveryManIdToUser: {
+          select: {
+            name: true,
+            phone: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+
+    if (!orders.length) {
+      return res
+        .status(200)
+        .json(jsonResponse(true, "No orders found", []));
+    }
+
+    // 🔥 2. clean & enrich data
+    const formattedOrders = orders.map((order) => ({
+      id: order.id,
+      invoiceNumber: order.invoiceNumber,
+      createdAt: order.createdAt,
+      status: order.status,
+      totalItems: order.totalItems,
+      subtotal: order.subtotal,
+      paymentMethod: order.paymentMethod,
+
+      // ✅ online / offline detect
+      type: order.orderType === "OFFLINE" ? "offline" : "online",
+
+      // ✅ delivery man
+      deliveryManName:
+        order.User_Order_deliveryManIdToUser?.name || null,
+      deliveryManPhone:
+        order.User_Order_deliveryManIdToUser?.phone || null,
+
+      // ✅ items
+      orderItems: order.orderItems,
+
+      // ✅ invoice info (detail page এর জন্য)
+      invoice: {
+        customerName: order.customerName,
+        customerPhone: order.customerPhone,
+        customerAddress: order.customerAddress,
+        paymentMethod: order.paymentMethod,
+        subtotal: order.subtotal,
+        deliveryCharge:
+          order.deliveryChargeInside ??
+          order.deliveryChargeOutside ??
+          0,
+        platformCharge: order.platformCharge ?? 0,
+      },
+    }));
+
+    // 🔥 3. analytics
+    const totalOrders = formattedOrders.length;
+
+    const totalSpent = formattedOrders.reduce(
+      (sum, o) => sum + Number(o.subtotal || 0),
+      0
+    );
+
+    const onlineOrders = formattedOrders.filter(
+      (o) => o.type === "online"
+    ).length;
+
+    const offlineOrders = formattedOrders.filter(
+      (o) => o.type === "offline"
+    ).length;
+
+    // 🔥 4. monthly stats (last 6 months)
+    const monthlyMap = {};
+
+    formattedOrders.forEach((o) => {
+      const d = new Date(o.createdAt);
+      const key = `${d.getFullYear()}-${d.getMonth()}`;
+      monthlyMap[key] = (monthlyMap[key] || 0) + Number(o.subtotal);
+    });
+
+    const now = new Date();
+
+    const monthlyStats = Array.from({ length: 6 }, (_, i) => {
+      const d = new Date(now.getFullYear(), now.getMonth() - 5 + i, 1);
+      const key = `${d.getFullYear()}-${d.getMonth()}`;
+
+      return {
+        month: d.toLocaleString("default", { month: "short" }),
+        year: d.getFullYear(),
+        total: monthlyMap[key] || 0,
+      };
+    });
+
+    return res.status(200).json(
+      jsonResponse(true, "Customer order analysis fetched", {
+        summary: {
+          totalOrders,
+          totalSpent,
+          onlineOrders,
+          offlineOrders,
+        },
+        monthlyStats,
+        orders: formattedOrders,
+      })
+    );
+  } catch (error) {
+    console.log(error);
+    return res
+      .status(500)
+      .json(jsonResponse(false, "Something went wrong", null));
+  }
+};
