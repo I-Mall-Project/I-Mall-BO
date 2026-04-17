@@ -5,7 +5,10 @@ import {
   register,
   sendLoginOtp,
   login,
-  registerCustomer
+  registerCustomer,
+  getAllCustomers,
+  searchCustomers,
+  getCustomerByPhone
 } from "../../controllers/auth/auth.js";
 import { usersCreate } from "../../utils/modules.js";
 import verify from "../../utils/verifyToken.js";
