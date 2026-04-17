@@ -172,6 +172,106 @@ export const registerCustomer = async (req, res) => {
 };
 
 
+export const getCustomerByPhone = async (req, res) => {
+  try {
+    const { phone } = req.params;
+
+    if (!phone) {
+      return res.status(400).json({
+        success: false,
+        message: "Phone number is required",
+      });
+    }
+
+    const customer = await prisma.customers.findFirst({
+      where: { phone },
+    });
+
+    if (!customer) {
+      return res.status(404).json({
+        success: false,
+        message: "Customer not found",
+        data: null,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Customer fetched successfully",
+      data: customer,
+    });
+
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+
+export const getAllCustomers = async (req, res) => {
+  try {
+    const customers = await prisma.customers.findMany({
+      orderBy: { createdAt: "desc" },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: `${customers.length} customers found`,
+      data: customers,
+    });
+
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+
+export const searchCustomers = async (req, res) => {
+  try {
+    const { search } = req.query;
+
+    const customers = await prisma.customers.findMany({
+      where: {
+        OR: [
+          {
+            phone: {
+              contains: search,
+            },
+          },
+          {
+            name: {
+              contains: search,
+              mode: "insensitive",
+            },
+          },
+        ],
+      },
+      take: 10,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Search result",
+      data: customers,
+    });
+
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+
 
 //login with password (plain text)
 export const login = async (req, res) => {

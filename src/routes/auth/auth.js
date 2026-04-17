@@ -33,6 +33,9 @@ router.post("/v1/auth/logout", logout);
 router.post("/v1/customer/auth/register", register);
 
 router.post("/v1/customer/auth/Customerregister", registerCustomer);
+router.get("/v1/customers", verify, getAllCustomers);
+router.get("/v1/customers/search", verify, searchCustomers);
+router.get("/v1/customers/:phone", verify, getCustomerByPhone);
 
 
 export default router;

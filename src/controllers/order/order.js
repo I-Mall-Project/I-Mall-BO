@@ -2435,7 +2435,6 @@ export const getRevenueAnalysis = async (req, res) => {
 };
 
 
-
 export const customerOrderAnalysis = async (req, res) => {
   try {
     const phone = req.params.phone;
@@ -2444,7 +2443,6 @@ export const customerOrderAnalysis = async (req, res) => {
       return res.status(400).json(jsonResponse(false, "Phone is required", null));
     }
 
-    // 🔥 1. সব order (online + offline same table থেকে)
     const orders = await prisma.order.findMany({
       where: {
         customerPhone: phone,
@@ -2452,27 +2450,27 @@ export const customerOrderAnalysis = async (req, res) => {
       },
       include: {
         orderItems: true,
-
-        // ✅ delivery man info
         User_Order_deliveryManIdToUser: {
-          select: {
-            name: true,
-            phone: true,
-          },
+          select: { name: true, phone: true },
         },
       },
-      orderBy: {
-        createdAt: "desc",
-      },
+      orderBy: { createdAt: "desc" },
     });
 
     if (!orders.length) {
-      return res
-        .status(200)
-        .json(jsonResponse(true, "No orders found", []));
+      return res.status(200).json(
+        jsonResponse(true, "No orders found", {
+          summary: {},
+          monthlyStats: [],
+          orders: [],
+          reorderSuggestions: [],
+        })
+      );
     }
 
-    // 🔥 2. clean & enrich data
+    // =========================
+    // 🔥 FORMAT ORDERS
+    // =========================
     const formattedOrders = orders.map((order) => ({
       id: order.id,
       invoiceNumber: order.invoiceNumber,
@@ -2482,19 +2480,22 @@ export const customerOrderAnalysis = async (req, res) => {
       subtotal: order.subtotal,
       paymentMethod: order.paymentMethod,
 
-      // ✅ online / offline detect
       type: order.orderType === "OFFLINE" ? "offline" : "online",
 
-      // ✅ delivery man
       deliveryManName:
         order.User_Order_deliveryManIdToUser?.name || null,
       deliveryManPhone:
         order.User_Order_deliveryManIdToUser?.phone || null,
 
-      // ✅ items
       orderItems: order.orderItems,
 
-      // ✅ invoice info (detail page এর জন্য)
+      // 🔥 reorder payload ready
+      reorderItems: order.orderItems.map((item) => ({
+        productId: item.productId,
+        productAttributeId: item.productAttributeId,
+        quantity: item.quantity,
+      })),
+
       invoice: {
         customerName: order.customerName,
         customerPhone: order.customerPhone,
@@ -2509,7 +2510,9 @@ export const customerOrderAnalysis = async (req, res) => {
       },
     }));
 
-    // 🔥 3. analytics
+    // =========================
+    // 🔥 SUMMARY
+    // =========================
     const totalOrders = formattedOrders.length;
 
     const totalSpent = formattedOrders.reduce(
@@ -2525,7 +2528,11 @@ export const customerOrderAnalysis = async (req, res) => {
       (o) => o.type === "offline"
     ).length;
 
-    // 🔥 4. monthly stats (last 6 months)
+    const avgOrderValue = totalSpent / totalOrders;
+
+    // =========================
+    // 🔥 MONTHLY STATS
+    // =========================
     const monthlyMap = {};
 
     formattedOrders.forEach((o) => {
@@ -2547,15 +2554,46 @@ export const customerOrderAnalysis = async (req, res) => {
       };
     });
 
+    // =========================
+    // 🔥 REORDER SUGGESTIONS (AI-lite 😎)
+    // =========================
+    const productMap = {};
+
+    formattedOrders.forEach((order) => {
+      order.orderItems.forEach((item) => {
+        const key = item.productId + "_" + item.productAttributeId;
+
+        if (!productMap[key]) {
+          productMap[key] = {
+            productId: item.productId,
+            productAttributeId: item.productAttributeId,
+            name: item.name,
+            totalQty: 0,
+          };
+        }
+
+        productMap[key].totalQty += item.quantity;
+      });
+    });
+
+    const reorderSuggestions = Object.values(productMap)
+      .sort((a, b) => b.totalQty - a.totalQty)
+      .slice(0, 5); // top 5 products
+
+    // =========================
+    // 🔥 RESPONSE
+    // =========================
     return res.status(200).json(
       jsonResponse(true, "Customer order analysis fetched", {
         summary: {
           totalOrders,
           totalSpent,
+          avgOrderValue,
           onlineOrders,
           offlineOrders,
         },
         monthlyStats,
+        reorderSuggestions,
         orders: formattedOrders,
       })
     );

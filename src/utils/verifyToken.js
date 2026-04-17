@@ -7,19 +7,33 @@ const verify = (req, res, next) => {
   const cookiesToken = req.cookies.accessToken;
   const authHeader = req.headers.token;
 
-  if (authHeader) {
-    const token = authHeader.split(" ")[1];
+  const token = authHeader
+    ? authHeader.split(" ")[1]
+    : cookiesToken;
 
-    if (token) {
-      jwt.verify(token, process.env.JWT_SECRET, async (err, user) => {
-        if (err)
-          res
-            .status(403)
-            .json(jsonResponse(false, "Token is not valid!", null));
-        req.user = user;
+  if (!token) {
+    return res
+      .clearCookie("accessToken", { secure: true, sameSite: "none" })
+      .status(401)
+      .json(jsonResponse(false, "You are not authenticated!", null));
+  }
 
+  jwt.verify(token, process.env.JWT_SECRET, async (err, decoded) => {
+    if (err || !decoded) {
+      return res
+        .status(403)
+        .json(jsonResponse(false, "Token is not valid!", null));
+    }
+
+    try {
+      req.user = decoded;
+
+      // =========================
+      // ✅ CASE 1: ADMIN / USER
+      // =========================
+      if (decoded.id) {
         const activeUser = await prisma.user.findFirst({
-          where: { id: req.user.id, isDeleted: false },
+          where: { id: decoded.id, isDeleted: false },
           select: {
             id: true,
             roleId: true,
@@ -31,112 +45,110 @@ const verify = (req, res, next) => {
 
         if (!activeUser) {
           return res
-            .clearCookie("accessToken", {
-              secure: true,
-              sameSite: "none",
-            })
+            .clearCookie("accessToken", { secure: true, sameSite: "none" })
             .status(401)
             .json(
-              jsonResponse(
-                false,
-                "You are not authenticated. Please login again",
-                null
-              )
+              jsonResponse(false, "You are not authenticated. Please login again", null)
             );
         }
 
-        //logout if changes in 'role' and 'parentId' occurs
-        console.log(activeUser.roleId);
+        // role / parent check
         if (activeUser.roleId !== null) {
           if (
-            activeUser.roleId !== req.user.roleId || activeUser.parentId
+            activeUser.roleId !== req.user.roleId ||
+            (activeUser.parentId
               ? activeUser.parentId !== req.user.parentId
-              : false
+              : false)
           ) {
             return res
-              .clearCookie("accessToken", {
-                secure: true,
-                sameSite: "none",
-              })
+              .clearCookie("accessToken", { secure: true, sameSite: "none" })
               .status(401)
               .json(jsonResponse(false, "Please log in again!", null));
           }
         }
 
-        //logout if changes in `user module access` occurs
+        // module access check
         const roleModuleList = await prisma.roleModule.findMany({
           where: { roleId: activeUser.roleId ?? undefined, isDeleted: false },
           include: { module: true },
         });
 
-        console.log({ roleModuleList });
-
-        const roleModuleList_length = roleModuleList.length;
-
-        const module_names = [];
+        const module_names = roleModuleList.map((r) => r.module.name);
 
         if (activeUser.roleId !== null) {
-          for (let i = 0; i < roleModuleList_length; i++) {
-            module_names.push(roleModuleList[i].module.name);
-          }
-
           if (!arrayEquals(req.user.moduleNames, module_names)) {
             return res
-              .clearCookie("accessToken", {
-                secure: true,
-                sameSite: "none",
-              })
+              .clearCookie("accessToken", { secure: true, sameSite: "none" })
               .status(401)
               .json(jsonResponse(false, "Please log in again!", null));
           }
         }
 
-        //check if user is active or banned
         if (!activeUser.isActive) {
           return res
-            .clearCookie("accessToken", {
-              secure: true,
-              sameSite: "none",
-            })
+            .clearCookie("accessToken", { secure: true, sameSite: "none" })
             .status(401)
             .json(
               jsonResponse(false, "You are no longer authenticated user!", null)
             );
         }
 
-        //check if user has module access
+        // module permission
         if (res.locals.module_name) {
           if (
             req.user &&
             req.user.moduleNames.includes(res.locals.module_name) === false
-          )
+          ) {
             return res.status(409).json({
               success: false,
               message: "You do not have permission to access this module",
               data: null,
             });
+          }
         }
 
-        next();
-      });
-    } else {
+        req.user.type = "admin"; // 🔥 important
+      }
+
+      // =========================
+      // ✅ CASE 2: CUSTOMER
+      // =========================
+      else if (decoded.phone) {
+        const customer = await prisma.customers.findFirst({
+          where: { phone: decoded.phone },
+        });
+
+        if (!customer) {
+          return res
+            .clearCookie("accessToken", { secure: true, sameSite: "none" })
+            .status(401)
+            .json(jsonResponse(false, "Customer not found", null));
+        }
+
+        // 🔥 attach customer info
+        req.user.id = customer.id;
+        req.user.phone = customer.phone;
+        req.user.name = customer.name;
+        req.user.type = "customer";
+      }
+
+      // =========================
+      // ❌ INVALID TOKEN STRUCTURE
+      // =========================
+      else {
+        return res
+          .status(401)
+          .json(jsonResponse(false, "Invalid token payload", null));
+      }
+
+      next();
+    } catch (error) {
+      console.log(error);
       return res
-        .clearCookie("accessToken", {
-          secure: true,
-          sameSite: "none",
-        })
-        .status(401)
-        .json(jsonResponse(false, "You are not authenticated!", null));
+        .status(500)
+        .json(jsonResponse(false, "Server error", null));
     }
-  } else {
-    return res
-      .clearCookie("accessToken", {
-        secure: true,
-        sameSite: "none",
-      })
-      .status(401)
-      .json(jsonResponse(false, "You are not authenticated!", null));
-  }
+  });
 };
 
 export default verify;
