@@ -66,7 +66,7 @@ router.get("/v1/payment/track", paymentCallback);
 router.get("/fraud-check-order", fraudCheckByOrderPhone);
 
 router.get("/v1/analysis/revenue", verify, getRevenueAnalysis);
-router.patch("/order/customer-status", customerUpdateOrderStatus);
+router.put("/order/customer-status", customerUpdateOrderStatus);
 
 
 
