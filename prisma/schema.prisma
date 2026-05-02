@@ -340,6 +340,7 @@ model Order {
   customerLat                    Float?
   customerLng                    Float?
   orderType                      String?           @default("ONLINE") @db.VarChar(20)
+  customerStatus                 String?
   DeliveryLocation               DeliveryLocation?
   coupon                         Coupon?           @relation(fields: [couponId], references: [id], onDelete: Cascade)
   user                           User?             @relation(fields: [userId], references: [id], onDelete: Cascade)

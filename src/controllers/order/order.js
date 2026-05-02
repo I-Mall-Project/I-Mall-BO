@@ -1697,25 +1697,28 @@ export const trackOrder = async (req, res) => {
       }
     }
 
-    return res.status(200).json({
-      success: true,
-      message: "Order fetched successfully",
-      data: {
-        invoice:       order.invoiceNumber,
-        status:        order.status,
-        createdAt:     order.createdAt,
-        assignedAt:    order.assignedAt,
-        deliveredAt:   order.deliveredAt,
-        customerName:  order.customerName,
-        customerPhone: order.customerPhone,
-        orderItems:    order.orderItems,
-        deliveryMan:   order.User_Order_deliveryManIdToUser
-          ? { name: order.User_Order_deliveryManIdToUser.name, phone: order.User_Order_deliveryManIdToUser.phone }
-          : null,
-        location,
-        eta, // { distanceKm, minutes, label, customerLat, customerLng }
-      },
-    });
+ return res.status(200).json({
+  success: true,
+  message: "Order fetched successfully",
+  data: {
+    id:             order.id,                              // ✅ নতুন
+    invoice:        order.invoiceNumber,
+    status:         order.status,
+    customerStatus:    order.customerStatus ?? null,       // ✅ নতুন
+    canCustomerUpdate: order.status === "DELIVERED" && !order.customerStatus, // ✅ নতুন
+    createdAt:      order.createdAt,
+    assignedAt:     order.assignedAt,
+    deliveredAt:    order.deliveredAt,
+    customerName:   order.customerName,
+    customerPhone:  order.customerPhone,
+    orderItems:     order.orderItems,
+    deliveryMan:    order.User_Order_deliveryManIdToUser
+      ? { name: order.User_Order_deliveryManIdToUser.name, phone: order.User_Order_deliveryManIdToUser.phone }
+      : null,
+    location,
+    eta,
+  },
+});
   } catch (err) {
     console.error(err);
     return res.status(500).json({ success: false, message: err.message || "Internal Server Error", data: null });
@@ -2033,7 +2036,7 @@ ${itemList}
 
 ⏰ <b>Assigned:</b> ${bdTime} (BD Time)
 
-👉 <a href="https://admin.i-mall.com.bd/delivery">Dashboard এ Login করুন</a> এবং order status update করুন।`;
+👉 <a href="https://i-mall-admin.vercel.app/">Dashboard এ Login করুন</a> এবং order status update করুন।`;
 
         await sendTelegramMessage(deliveryMan.telegramChatId, message);
       }
@@ -2602,5 +2605,84 @@ export const customerOrderAnalysis = async (req, res) => {
     return res
       .status(500)
       .json(jsonResponse(false, "Something went wrong", null));
+  }
+};
+
+
+export const customerUpdateOrderStatus = async (req, res) => {
+  try {
+    const { phone, orderId, status } = req.body;
+
+    if (!phone || !orderId || !status) {
+      return res.status(400).json({
+        success: false,
+        message: "phone, orderId এবং status সবগুলো দিতে হবে",
+        data: null,
+      });
+    }
+
+    const ALLOWED_STATUSES = ["RECEIVED", "RETURNED", "NOT_RECEIVED"];
+    if (!ALLOWED_STATUSES.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: `শুধুমাত্র এই status গুলো দেওয়া যাবে: ${ALLOWED_STATUSES.join(", ")}`,
+        data: null,
+      });
+    }
+
+    // ✅ Phone দিয়ে verify — অন্যের order কেউ update করতে পারবে না
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, customerPhone: phone, isDeleted: false },
+    });
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "এই নম্বরে এই অর্ডারটি পাওয়া যায়নি",
+        data: null,
+      });
+    }
+
+    // ✅ Delivery man DELIVERED না করলে customer update করতে পারবে না
+    if (order.status !== "DELIVERED") {
+      return res.status(400).json({
+        success: false,
+        message: "ডেলিভারি নিশ্চিত হওয়ার পরেই status দেওয়া যাবে",
+        data: null,
+      });
+    }
+
+    // ✅ একবার দিলে আর update করা যাবে না
+    if (order.customerStatus) {
+      return res.status(400).json({
+        success: false,
+        message: "আপনি ইতিমধ্যে এই অর্ডারের status দিয়েছেন",
+        data: null,
+      });
+    }
+
+    const updatedOrder = await prisma.order.update({
+      where: { id: orderId },
+      data: { customerStatus: status },
+      select: {
+        id: true,
+        invoiceNumber: true,
+        status: true,
+        customerStatus: true,
+      },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "আপনার feedback সফলভাবে জমা হয়েছে",
+      data: updatedOrder,
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({
+      success: false,
+      message: err.message || "Internal Server Error",
+      data: null,
+    });
   }
 };
