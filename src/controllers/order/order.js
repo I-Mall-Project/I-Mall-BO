@@ -19,6 +19,8 @@ import { autoAssignRider } from "../../utils/assignRider.js";
 import { calculateDeliveryCharge } from "../../utils/Deliverycharge.js";
 import { generateInvoiceNumber } from "../../utils/generateInvoiceNumber.js";
 import { checkAndSendLoyaltyCoupon, recordCouponUsage } from "../coupon/coupon.js";
+import { generateTrackingCode } from "../../utils/generateTrackingCode.js";
+
 
 
 
@@ -203,6 +205,9 @@ let deliveryDistanceKm = 0;
       productInfo.productCode    || "0000"
     );
 
+    const trackingCode = generateTrackingCode();
+
+
     // ----------------------------------------------------------------
     // 4. Transaction — order create
     // ----------------------------------------------------------------
@@ -310,6 +315,7 @@ let deliveryDistanceKm = 0;
           platformCharge:        safePlatformCharge,
           orderItems: { create: newOrderItems },
           orderType, // ← নতুন field
+          trackingCode, // ← নতুন field
         },
         include: { orderItems: true },
       });
@@ -454,7 +460,7 @@ let deliveryDistanceKm = 0;
 
     autoAssignRider(prisma, newOrder, sendTelegramMessage).catch(console.error);
 
-    return res.status(200).json(jsonResponse(true, "Your order has been placed successfully", newOrder));
+    return res.status(200).json(jsonResponse(true, "Your order has been placed successfully", newOrder, trackingCode));
 
   } catch (error) {
     console.log(error);
