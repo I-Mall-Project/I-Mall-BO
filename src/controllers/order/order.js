@@ -1639,16 +1639,126 @@ export const getRiderStatus = async (req, res) => {
   }
 };
 
+// export const trackOrder = async (req, res) => {
+//   try {
+//     const { phone } = req.query;
+
+//     if (!phone) {
+//       return res.status(400).json({ success: false, message: "Phone number required", data: null });
+//     }
+
+//     const order = await prisma.order.findFirst({
+//       where: { customerPhone: phone, isDeleted: false },
+//       orderBy: { createdAt: "desc" },
+//       include: {
+//         orderItems: true,
+//         User_Order_deliveryManIdToUser: {
+//           select: { id: true, name: true, phone: true },
+//         },
+//       },
+//     });
+
+//     if (!order) {
+//       return res.status(404).json({ success: false, message: "এই নম্বরে কোনো অর্ডার পাওয়া যায়নি", data: null });
+//     }
+
+//     // Live location
+//     let location = null;
+//     if (order.deliveryManId && (order.status === "SHIPPED" || order.status === "PENDING")) {
+//       const loc = await prisma.$queryRaw`
+//         SELECT "lat", "lng", "updatedAt"
+//         FROM "DeliveryLocation"
+//         WHERE "orderId" = ${order.id}
+//         LIMIT 1
+//       `;
+//       location = loc?.[0] || null;
+//     }
+
+//     // ✅ ETA — customer lat/lng থাকলে directly use করো, না থাকলে geocode
+//     let eta = null;
+//     if (location && order.status === "SHIPPED") {
+//       // ✅ Customer pin drop করলে সেটাই use করো — সবচেয়ে accurate
+//       let customerCoords = null;
+//       if (order.customerLat && order.customerLng) {
+//         customerCoords = { lat: parseFloat(order.customerLat), lng: parseFloat(order.customerLng) };
+//       } else {
+//         customerCoords = await geocodeAddress(order);
+//       }
+
+//       if (customerCoords) {
+//         const route = await getRouteETA(
+//           parseFloat(location.lat),
+//           parseFloat(location.lng),
+//           customerCoords.lat,
+//           customerCoords.lng
+//         );
+
+//         if (route) {
+//           eta = {
+//             ...route,
+//             customerLat: customerCoords.lat,
+//             customerLng: customerCoords.lng,
+//           };
+//         }
+//       }
+//     }
+
+//  return res.status(200).json({
+//   success: true,
+//   message: "Order fetched successfully",
+//   data: {
+//     id:             order.id,                              // ✅ নতুন
+//     invoice:        order.invoiceNumber,
+//     status:         order.status,
+//     customerStatus:    order.customerStatus ?? null,       // ✅ নতুন
+//     canCustomerUpdate: order.status === "DELIVERED" && !order.customerStatus, // ✅ নতুন
+//     createdAt:      order.createdAt,
+//     assignedAt:     order.assignedAt,
+//     deliveredAt:    order.deliveredAt,
+//     customerName:   order.customerName,
+//     customerPhone:  order.customerPhone,
+//     orderItems:     order.orderItems,
+//     deliveryMan:    order.User_Order_deliveryManIdToUser
+//       ? { name: order.User_Order_deliveryManIdToUser.name, phone: order.User_Order_deliveryManIdToUser.phone }
+//       : null,
+//     location,
+//     eta,
+//   },
+// });
+//   } catch (err) {
+//     console.error(err);
+//     return res.status(500).json({ success: false, message: err.message || "Internal Server Error", data: null });
+//   }
+// };
+
+
+
+
+
+
+
+
+
+
+// ✅ Latest Order Fetch Controller
+
 export const trackOrder = async (req, res) => {
   try {
-    const { phone } = req.query;
+    const { code } = req.query;
 
-    if (!phone) {
-      return res.status(400).json({ success: false, message: "Phone number required", data: null });
+    if (!code) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Tracking code দিন", 
+        data: null 
+      });
     }
 
     const order = await prisma.order.findFirst({
-      where: { customerPhone: phone, isDeleted: false },
+      where: { 
+        trackingCode: code.toString().trim().toUpperCase(),
+        isDeleted: false 
+      },
       orderBy: { createdAt: "desc" },
       include: {
         orderItems: true,
@@ -1659,12 +1769,18 @@ export const trackOrder = async (req, res) => {
     });
 
     if (!order) {
-      return res.status(404).json({ success: false, message: "এই নম্বরে কোনো অর্ডার পাওয়া যায়নি", data: null });
+      return res.status(404).json({ 
+        success: false, 
+        message: "এই code দিয়ে কোনো অর্ডার পাওয়া যায়নি", 
+        data: null 
+      });
     }
 
-    // Live location
     let location = null;
-    if (order.deliveryManId && (order.status === "SHIPPED" || order.status === "PENDING")) {
+    if (
+      order.deliveryManId && 
+      (order.status === "SHIPPED" || order.status === "PENDING")
+    ) {
       const loc = await prisma.$queryRaw`
         SELECT "lat", "lng", "updatedAt"
         FROM "DeliveryLocation"
@@ -1674,13 +1790,15 @@ export const trackOrder = async (req, res) => {
       location = loc?.[0] || null;
     }
 
-    // ✅ ETA — customer lat/lng থাকলে directly use করো, না থাকলে geocode
     let eta = null;
     if (location && order.status === "SHIPPED") {
-      // ✅ Customer pin drop করলে সেটাই use করো — সবচেয়ে accurate
       let customerCoords = null;
+
       if (order.customerLat && order.customerLng) {
-        customerCoords = { lat: parseFloat(order.customerLat), lng: parseFloat(order.customerLng) };
+        customerCoords = { 
+          lat: parseFloat(order.customerLat), 
+          lng: parseFloat(order.customerLng) 
+        };
       } else {
         customerCoords = await geocodeAddress(order);
       }
@@ -1692,42 +1810,51 @@ export const trackOrder = async (req, res) => {
           customerCoords.lat,
           customerCoords.lng
         );
-
         if (route) {
-          eta = {
-            ...route,
-            customerLat: customerCoords.lat,
-            customerLng: customerCoords.lng,
+          eta = { 
+            ...route, 
+            customerLat: customerCoords.lat, 
+            customerLng: customerCoords.lng 
           };
         }
       }
     }
 
- return res.status(200).json({
-  success: true,
-  message: "Order fetched successfully",
-  data: {
-    id:             order.id,                              // ✅ নতুন
-    invoice:        order.invoiceNumber,
-    status:         order.status,
-    customerStatus:    order.customerStatus ?? null,       // ✅ নতুন
-    canCustomerUpdate: order.status === "DELIVERED" && !order.customerStatus, // ✅ নতুন
-    createdAt:      order.createdAt,
-    assignedAt:     order.assignedAt,
-    deliveredAt:    order.deliveredAt,
-    customerName:   order.customerName,
-    customerPhone:  order.customerPhone,
-    orderItems:     order.orderItems,
-    deliveryMan:    order.User_Order_deliveryManIdToUser
-      ? { name: order.User_Order_deliveryManIdToUser.name, phone: order.User_Order_deliveryManIdToUser.phone }
-      : null,
-    location,
-    eta,
-  },
-});
+    return res.status(200).json({
+      success: true,
+      message: "Order fetched successfully",
+      data: {
+        id:                order.id,
+        invoice:           order.invoiceNumber,
+        trackingCode:      order.trackingCode,
+        status:            order.status,
+        customerStatus:    order.customerStatus ?? null,
+        canCustomerUpdate: order.status === "DELIVERED" && !order.customerStatus,
+        createdAt:         order.createdAt,
+        assignedAt:        order.assignedAt,
+        deliveredAt:       order.deliveredAt,
+        customerName:      order.customerName,
+        customerPhone:     order.customerPhone,
+        deliveryCharge:    order.deliveryCharge ?? null,
+        orderItems:        order.orderItems,
+        deliveryMan:       order.User_Order_deliveryManIdToUser
+          ? { 
+              name:  order.User_Order_deliveryManIdToUser.name, 
+              phone: order.User_Order_deliveryManIdToUser.phone 
+            }
+          : null,
+        location,
+        eta,
+      },
+    });
+
   } catch (err) {
     console.error(err);
-    return res.status(500).json({ success: false, message: err.message || "Internal Server Error", data: null });
+    return res.status(500).json({ 
+      success: false, 
+      message: err.message || "Internal Server Error", 
+      data: null 
+    });
   }
 };
 
@@ -1740,7 +1867,11 @@ export const trackOrder = async (req, res) => {
 
 
 
-// ✅ Latest Order Fetch Controller
+
+
+
+
+
 export const getLatestOrder = async (req, res) => {
   try {
     const latestOrder = await prisma.order.findFirst({
