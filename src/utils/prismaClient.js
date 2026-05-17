@@ -1,17 +1,17 @@
 import { PrismaClient } from "@prisma/client";
 
-// Global singleton for Vercel / serverless
+const prisma = new PrismaClient();
+
+
 const globalForPrisma = globalThis;
 
-const prisma =
-  globalForPrisma.prisma ||
-  new PrismaClient({
-    log: ["error"], // keep only errors
-  });
+export const prisma =
+  globalForPrisma.prisma || new PrismaClient();
 
-// store instance globally (VERY IMPORTANT)
 if (process.env.NODE_ENV !== "production") {
   globalForPrisma.prisma = prisma;
 }
 
-export default { prisma };
+
+
+export default prisma;

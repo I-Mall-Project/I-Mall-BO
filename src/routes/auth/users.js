@@ -8,7 +8,9 @@ import {
   updateUser,
   getDeliveryMen,
   healthCheck
-  } from "../../controllers/auth/user.js";
+
+  
+} from "../../controllers/auth/user.js";
 import {
   usersBan,
   usersEdit,
@@ -47,7 +49,7 @@ router.put("/v1/customer/auth/users/:id", verify, updateUser);
 
 router.get("/v1/auth/deliveryMen", verify, getDeliveryMen);
 
-router.get("/v1/healthCheck", healthCheck);
+router.get("/v1/healthCheck", healthCheck );
 
 
 export default router;
