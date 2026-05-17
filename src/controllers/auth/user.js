@@ -376,3 +376,12 @@ export const getDeliveryMen = async (req, res) => {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
+
+
+export const healthCheck = (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: "Server is running",
+  });
+  
+}

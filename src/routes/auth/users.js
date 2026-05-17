@@ -6,8 +6,9 @@ import {
   getUsers,
   getUsersByUser,
   updateUser,
-  getDeliveryMen
-} from "../../controllers/auth/user.js";
+  getDeliveryMen,
+  healthCheck
+  } from "../../controllers/auth/user.js";
 import {
   usersBan,
   usersEdit,
@@ -15,6 +16,7 @@ import {
   usersRemove,
   usersSingle,
   usersUserList,
+  
 } from "../../utils/modules.js";
 import verify from "../../utils/verifyToken.js";
 
@@ -44,6 +46,8 @@ router.put("/v1/customer/auth/users/:id", verify, updateUser);
 
 
 router.get("/v1/auth/deliveryMen", verify, getDeliveryMen);
+
+router.get("/v1/healthCheck", healthCheck);
 
 
 export default router;
