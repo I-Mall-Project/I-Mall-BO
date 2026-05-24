@@ -1835,7 +1835,9 @@ export const trackOrder = async (req, res) => {
         deliveredAt:       order.deliveredAt,
         customerName:      order.customerName,
         customerPhone:     order.customerPhone,
-        deliveryCharge:    order.deliveryCharge ?? null,
+        deliveryChargeInside:  order.deliveryChargeInside ?? 0,
+platformCharge:        order.platformCharge ?? 0,
+     
         orderItems:        order.orderItems,
         deliveryMan:       order.User_Order_deliveryManIdToUser
           ? { 
