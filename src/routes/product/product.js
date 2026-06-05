@@ -22,6 +22,7 @@ import {
   updateProduct,
   updateProductAttribute,
   updateProductImage,
+  bulkCreateProducts
 } from "../../controllers/product/product.js";
 import {
   productBan,
@@ -42,6 +43,7 @@ const upload = multer({ storage });
 const router = express.Router();
 
 router.post("/v1/products", productCreate, verify, upload.array("images"), createProduct);
+router.post("/v1/products/bulk", bulkCreateProducts);
 router.get("/v1/products-email/:id", verify, sendProductEmail);
 router.get("/v1/products", productList, verify, getProducts);
 router.get("/v1/user/products/", productUserList, verify, getProductsByUser);

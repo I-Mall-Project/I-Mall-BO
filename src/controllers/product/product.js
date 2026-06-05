@@ -141,10 +141,124 @@ export const createProduct = async (req, res) => {
 };
 
 
+export const bulkCreateProducts = async (req, res) => {
+  try {
+    const { products } = req.body;
 
+    if (!products || !Array.isArray(products) || products.length === 0) {
+      return res
+        .status(400)
+        .json(jsonResponse(false, "Products array required", null));
+    }
 
+    const userId = req.user.id;
 
+    const CHUNK_SIZE = 20;
 
+    const chunks = [];
+    for (let i = 0; i < products.length; i += CHUNK_SIZE) {
+      chunks.push(products.slice(i, i + CHUNK_SIZE));
+    }
+
+    const success = [];
+    const failed = [];
+
+    for (const chunk of chunks) {
+      await prisma.$transaction(async (tx) => {
+        for (const item of chunk) {
+          try {
+            // -------------------------
+            // AUTO DESCRIPTION GENERATOR
+            // -------------------------
+            const shortDescription =
+              item.shortDescription ||
+              `${item.name} is a trusted product for effective use.`;
+
+            const longDescription =
+              item.longDescription ||
+              `${item.name} is a high quality product designed for reliable performance and safe usage.`;
+
+            // -------------------------
+            // CREATE PRODUCT
+            // -------------------------
+            const product = await tx.product.create({
+              data: {
+                userId,
+                name: item.name,
+                categoryId: item.categoryId,
+                subcategoryId: item.subcategoryId || null,
+                subsubcategoryId: item.subsubcategoryId || null,
+                brandId: item.brandId || null,
+                supplierId: item.supplierId || null,
+                sku: item.sku || null,
+                productCode: item.productCode || null,
+                barcode: item.barcode || null,
+                shortDescription,
+                longDescription,
+                isActive: item.isActive ?? true,
+                isFeatured: item.isFeatured ?? false,
+                isTrending: item.isTrending ?? false,
+                createdBy: userId,
+                slug: `${slugify(item.name)}-${Date.now()}`,
+              },
+            });
+
+            // -------------------------
+            // VARIANTS (ProductAttribute)
+            // -------------------------
+            if (item.productAttributes?.length) {
+              const attrs = item.productAttributes.map((attr) => {
+                const retailPrice = Number(attr.retailPrice || 0);
+                const discountPercent = Number(attr.discountPercent || 0);
+
+                const discountPrice =
+                  (retailPrice * discountPercent) / 100;
+
+                return {
+                  productId: product.id,
+                  size: attr.size,
+                  costPrice: Number(attr.costPrice || 0),
+                  retailPrice,
+                  discountPercent,
+                  discountPrice,
+                  discountedRetailPrice:
+                    retailPrice - discountPrice,
+                  stockAmount: Number(attr.stockAmount || 0),
+                  createdBy: userId,
+                };
+              });
+
+              await tx.productAttribute.createMany({
+                data: attrs,
+              });
+            }
+
+            success.push(product);
+          } catch (err) {
+            failed.push({
+              item,
+              error: err.message,
+            });
+          }
+        }
+      });
+    }
+
+    return res.status(200).json(
+      jsonResponse(true, "Bulk upload completed", {
+        successCount: success.length,
+        failedCount: failed.length,
+        success,
+        failed,
+      })
+    );
+  } catch (error) {
+    console.log("BULK ERROR:", error);
+    return res
+      .status(500)
+      .json(jsonResponse(false, error.message, null));
+  }
+};
 
 
 
