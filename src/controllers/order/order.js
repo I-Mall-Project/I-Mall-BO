@@ -316,6 +316,7 @@ let deliveryDistanceKm = 0;
           orderItems: { create: newOrderItems },
           orderType, // ← নতুন field
           trackingCode, // ← নতুন field
+          ...(isOfflineSale && { status: "DELIVERED" }),
         },
         include: { orderItems: true },
       });
