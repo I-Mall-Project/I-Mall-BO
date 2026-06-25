@@ -5,7 +5,7 @@
   "author": "iamdeepta <47137605+iamdeepta@users.noreply.github.com>",
   "license": "MIT",
   "dependencies": {
-    "@prisma/client": "^4.12.0",
+    "@prisma/client": "^4.16.2",
     "axios": "^1.12.2",
     "bcryptjs": "^2.4.3",
     "cloudinary": "^1.36.4",
@@ -25,7 +25,8 @@
     "sharp": "^0.32.1",
     "socket.io": "^4.8.1",
     "sslcommerz-lts": "^1.1.0",
-    "striptags": "^3.2.0"
+    "striptags": "^3.2.0",
+    "xlsx": "^0.18.5"
   },
   "description": "Backend apis",
   "scripts": {

@@ -16,6 +16,7 @@ import subcategoryRoutes from "./subcategory/index.js";
 import subsubcategoryRoutes from "./subsubcategory/index.js";
 import supplierRoutes from "./supplier/index.js";
 import  telegramRoutes from "./telegram/index.js";
+import masterCatalogRoutes from "./master/index.js";
 
 const allRoutes = [
   ...authRoutes,
@@ -36,6 +37,7 @@ const allRoutes = [
   ...newsletterRoutes,
   ...contactRoutes,
   ...telegramRoutes,
+  ...masterCatalogRoutes
 ];
 
 export default allRoutes;
