@@ -13,7 +13,7 @@ import prisma from "../../utils/prismaClient.js";
 
 import { createProduct } from "../product/product.js";
 
-const MEDICINE_CATEGORY_ID = process.env.MEDICINE_CATEGORY_ID;
+const MEDICINE_CATEGORY_ID = "c0d2ae43-e1cc-4ff0-b281-178862322a21";
 
 
 // ============================================================
