@@ -6,7 +6,7 @@ import {
   searchMasterCatalog,
   getCatalogFilters,
   bulkAddToShop,
-} from "../../controllers/master/masterCatalog.js";
+} from "../../controllers/master/mastercatalog.js";
 import verify from "../../utils/verifyToken.js";
 
 const router = express.Router();
