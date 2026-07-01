@@ -142,20 +142,20 @@ function mapMedicineToProductBody(med, brandId) {
   if (med.price_1pc) {
     productAttributes.push({
       size:        "1 PC",
-      costPrice:   Number(med.price_1pc) * 0.85,
+      costPrice:   Number(med.price_1pc) ,
       retailPrice: Number(med.price_1pc),
       stockAmount: 0,
     });
   }
 
-  if (med.price_10pc) {
-    productAttributes.push({
-      size:        "10 PCS",
-      costPrice:   Number(med.price_10pc) * 0.85,
-      retailPrice: Number(med.price_10pc),
-      stockAmount: 0,
-    });
-  }
+  // if (med.price_10pc) {
+  //   productAttributes.push({
+  //     size:        "10 PCS",
+  //     costPrice:   Number(med.price_10pc) * 0.85,
+  //     retailPrice: Number(med.price_10pc),
+  //     stockAmount: 0,
+  //   });
+  // }
 
   return {
     name:              med.medicine_name,
