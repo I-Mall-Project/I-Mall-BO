@@ -37,14 +37,86 @@ import uploadToCLoudinary from "../../utils/uploadToCloudinary.js";
 // 1. SEARCH — Master Catalog থেকে medicines খোঁজা
 // GET /api/master-catalog?q=napa&dosageForm=Tablet&brandId=12&page=1
 // ------------------------------------------------------------
+// export const searchMasterCatalog = async (req, res) => {
+//   try {
+//     const { q = "", dosageForm = "", page = 1, limit = 20, brandId } = req.query;
+
+//     if (!brandId) {
+//       return res.status(400).json({ success: false, message: "brandId প্রয়োজন" });
+//     }
+
+//     const skip = (Number(page) - 1) * Number(limit);
+
+//     const where = {
+//       is_active: true,
+//       ...(q && {
+//         OR: [
+//           { medicine_name: { contains: q, mode: "insensitive" } },
+//           { generic_name:  { contains: q, mode: "insensitive" } },
+//           { company_name:  { contains: q, mode: "insensitive" } },
+//         ],
+//       }),
+//       ...(dosageForm && { dosage_form: dosageForm }),
+//     };
+
+//     const [medicines, total] = await Promise.all([
+//       prisma.master_catalog.findMany({
+//         where,
+//         skip,
+//         take:    Number(limit),
+//         orderBy: { medicine_name: "asc" },
+//         select: {
+//           id:            true,
+//           medicine_name: true,
+//           generic_name:  true,
+//           strength:      true,
+//           dosage_form:   true,
+//           company_name:  true,
+//           price_1pc:     true,
+//           price_10pc:    true,
+//           shop_catalog_items: {
+//             where:  { brand_id: String(brandId) },
+//             select: { id: true },
+//           },
+//         },
+//       }),
+//       prisma.master_catalog.count({ where }),
+//     ]);
+
+//     const data = medicines.map((m) => ({
+//       id:           m.id,
+//       medicineName: m.medicine_name,
+//       genericName:  m.generic_name,
+//       strength:     m.strength,
+//       dosageForm:   m.dosage_form,
+//       companyName:  m.company_name,
+//       price1pc:     m.price_1pc,
+//       price10pc:    m.price_10pc,
+//       alreadyAdded: m.shop_catalog_items.length > 0,
+//     }));
+
+//     return res.status(200).json({
+//       success: true,
+//       data,
+//       pagination: {
+//         page:  Number(page),
+//         limit: Number(limit),
+//         total,
+//         pages: Math.ceil(total / Number(limit)),
+//       },
+//     });
+//   } catch (error) {
+//     console.error("searchMasterCatalog error:", error);
+//     return res.status(500).json({ success: false, message: error.message });
+//   }
+// };
+
+
 export const searchMasterCatalog = async (req, res) => {
   try {
     const { q = "", dosageForm = "", page = 1, limit = 20, brandId } = req.query;
 
-    if (!brandId) {
-      return res.status(400).json({ success: false, message: "brandId প্রয়োজন" });
-    }
-
+    // brandId না থাকলেও চলবে — admin mode
     const skip = (Number(page) - 1) * Number(limit);
 
     const where = {
@@ -74,10 +146,14 @@ export const searchMasterCatalog = async (req, res) => {
           company_name:  true,
           price_1pc:     true,
           price_10pc:    true,
-          shop_catalog_items: {
-            where:  { brand_id: String(brandId) },
-            select: { id: true },
-          },
+          image_url:     true,
+          // brandId থাকলেই shop_catalog_items check করো
+          ...(brandId && {
+            shop_catalog_items: {
+              where:  { brand_id: String(brandId) },
+              select: { id: true },
+            },
+          }),
         },
       }),
       prisma.master_catalog.count({ where }),
@@ -92,7 +168,8 @@ export const searchMasterCatalog = async (req, res) => {
       companyName:  m.company_name,
       price1pc:     m.price_1pc,
       price10pc:    m.price_10pc,
-      alreadyAdded: m.shop_catalog_items.length > 0,
+      imageUrl:     m.image_url,
+      alreadyAdded: brandId ? (m.shop_catalog_items?.length > 0) : false,
     }));
 
     return res.status(200).json({
@@ -110,7 +187,6 @@ export const searchMasterCatalog = async (req, res) => {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
-
 
 // ------------------------------------------------------------
 // 2. FILTERS — Dosage form dropdown এর জন্য
