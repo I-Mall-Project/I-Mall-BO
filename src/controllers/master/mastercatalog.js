@@ -15,6 +15,9 @@ import { createProduct } from "../product/product.js";
 
 const MEDICINE_CATEGORY_ID = "c0d2ae43-e1cc-4ff0-b281-178862322a21";
 
+import uploadToCLoudinary from "../../utils/uploadToCloudinary.js";
+
+
 
 // ============================================================
 // controllers/masterCatalog.controller.js
@@ -349,3 +352,32 @@ function callCreateProduct(body, user) {
     createProduct(fakeReq, fakeRes);
   });
 }
+
+// controllers/masterCatalog.controller.js এ যোগ করুন
+
+export const updateMedicineImage = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const file = req.file;
+
+    if (!file) {
+      return res.status(400).json({ success: false, message: "Image দিন" });
+    }
+
+    const imageUrl = await new Promise((resolve, reject) => {
+      uploadToCLoudinary(file, "master-catalog", (err, result) => {
+        if (err) reject(err);
+        else resolve(result.secure_url);
+      });
+    });
+
+    await prisma.master_catalog.update({
+      where: { id: Number(id) },
+      data:  { image_url: imageUrl },
+    });
+
+    return res.status(200).json({ success: true, data: { imageUrl } });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
