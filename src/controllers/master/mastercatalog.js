@@ -176,9 +176,77 @@ function mapMedicineToProductBody(med, brandId) {
 // POST /api/master-catalog/bulk-add
 // body: { catalogIds: [1, 5, 23], brandId: 12 }
 // ------------------------------------------------------------
+// export const bulkAddToShop = async (req, res) => {
+//   try {
+//     const { catalogIds, brandId } = req.body;
+
+//     if (!brandId) {
+//       return res.status(400).json({ success: false, message: "brandId প্রয়োজন" });
+//     }
+//     if (!catalogIds?.length) {
+//       return res.status(400).json({ success: false, message: "কোনো medicine select করা হয়নি" });
+//     }
+
+//     // Already added বাদ দিন
+//     const existing = await prisma.shop_catalog_items.findMany({
+//       where:  { brand_id: String(brandId), catalog_id: { in: catalogIds } },
+//       select: { catalog_id: true },
+//     });
+//     const existingIds = new Set(existing.map((e) => e.catalog_id));
+//     const newIds       = catalogIds.filter((id) => !existingIds.has(id));
+
+//     if (!newIds.length) {
+//       return res.status(200).json({ success: true, message: "সব medicine আগেই add করা আছে", added: 0 });
+//     }
+
+//     const medicines = await prisma.master_catalog.findMany({
+//       where: { id: { in: newIds }, is_active: true },
+//     });
+
+//     const successList = [];
+//     const failedList  = [];
+
+//     for (const med of medicines) {
+//       try {
+//         const result = await callCreateProduct(
+//           mapMedicineToProductBody(med, brandId),
+//           req.user
+//         );
+
+//         if (result.success) {
+//           await prisma.shop_catalog_items.create({
+//             data: {
+//               brand_id:   String(brandId),
+//               catalog_id: med.id,
+//               product_id: result.data.id,
+//             },
+//           });
+//           successList.push(med.medicine_name);
+//         } else {
+//           failedList.push({ name: med.medicine_name, reason: result.message });
+//         }
+//       } catch (err) {
+//         failedList.push({ name: med.medicine_name, reason: err.message });
+//       }
+//     }
+
+//     return res.status(200).json({
+//       success: true,
+//       message: `${successList.length}টি medicine আপনার shop এ add হয়েছে`,
+//       added:  successList.length,
+//       failed: failedList.length,
+//       failedDetails: failedList,
+//     });
+//   } catch (error) {
+//     console.error("bulkAddToShop error:", error);
+//     return res.status(500).json({ success: false, message: error.message });
+//   }
+// };
+
+
 export const bulkAddToShop = async (req, res) => {
   try {
-    const { catalogIds, brandId } = req.body;
+    const { catalogIds, brandId, overrides = [] } = req.body;
 
     if (!brandId) {
       return res.status(400).json({ success: false, message: "brandId প্রয়োজন" });
@@ -187,13 +255,19 @@ export const bulkAddToShop = async (req, res) => {
       return res.status(400).json({ success: false, message: "কোনো medicine select করা হয়নি" });
     }
 
+    // overrides কে map এ convert করো
+    const overrideMap = {};
+    for (const o of overrides) {
+      overrideMap[o.id] = o;
+    }
+
     // Already added বাদ দিন
     const existing = await prisma.shop_catalog_items.findMany({
       where:  { brand_id: String(brandId), catalog_id: { in: catalogIds } },
       select: { catalog_id: true },
     });
     const existingIds = new Set(existing.map((e) => e.catalog_id));
-    const newIds       = catalogIds.filter((id) => !existingIds.has(id));
+    const newIds      = catalogIds.filter((id) => !existingIds.has(id));
 
     if (!newIds.length) {
       return res.status(200).json({ success: true, message: "সব medicine আগেই add করা আছে", added: 0 });
@@ -208,10 +282,17 @@ export const bulkAddToShop = async (req, res) => {
 
     for (const med of medicines) {
       try {
-        const result = await callCreateProduct(
-          mapMedicineToProductBody(med, brandId),
-          req.user
-        );
+        const body     = mapMedicineToProductBody(med, brandId);
+        const override = overrideMap[med.id];
+
+        // override থাকলে price ও stock replace করো
+        if (override && body.productAttributes.length > 0) {
+          body.productAttributes[0].retailPrice = Number(override.retailPrice);
+          body.productAttributes[0].costPrice   = Number(override.costPrice);
+          body.productAttributes[0].stockAmount = Number(override.stockAmount);
+        }
+
+        const result = await callCreateProduct(body, req.user);
 
         if (result.success) {
           await prisma.shop_catalog_items.create({
@@ -233,8 +314,8 @@ export const bulkAddToShop = async (req, res) => {
     return res.status(200).json({
       success: true,
       message: `${successList.length}টি medicine আপনার shop এ add হয়েছে`,
-      added:  successList.length,
-      failed: failedList.length,
+      added:   successList.length,
+      failed:  failedList.length,
       failedDetails: failedList,
     });
   } catch (error) {
@@ -242,7 +323,6 @@ export const bulkAddToShop = async (req, res) => {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
-
 
 // ------------------------------------------------------------
 // 🔑 HELPER — createProduct(req, res) কে function call এর মতো use করা
