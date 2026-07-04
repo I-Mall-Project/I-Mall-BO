@@ -23,5 +23,7 @@ router.get("/v1/master-catalog/filters", verify, getCatalogFilters);
 router.post("/v1/master-catalog/bulk-add", verify, bulkAddToShop);
 router.put("/v1/master-catalog/:id/image", verify, upload.single("image"), updateMedicineImage);
 
+router.delete("/v1/master-catalog/:id/image", verify, deleteMedicineImage);
+
 
 export default router;

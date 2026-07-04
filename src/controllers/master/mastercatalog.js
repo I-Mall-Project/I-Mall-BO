@@ -457,3 +457,19 @@ export const updateMedicineImage = async (req, res) => {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
+
+
+export const deleteMedicineImage = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    await prisma.master_catalog.update({
+      where: { id: Number(id) },
+      data:  { image_url: null },
+    });
+
+    return res.status(200).json({ success: true, message: "Image delete হয়েছে" });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
