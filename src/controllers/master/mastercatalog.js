@@ -427,9 +427,7 @@ export const updateMedicineImage = async (req, res) => {
     const { id } = req.params;
     const file = req.file;
 
-    if (!file) {
-      return res.status(400).json({ success: false, message: "Image দিন" });
-    }
+    if (!file) return res.status(400).json({ success: false, message: "Image দিন" });
 
     const imageUrl = await new Promise((resolve, reject) => {
       uploadToCLoudinary(file, "master-catalog", (err, result) => {
@@ -438,17 +436,30 @@ export const updateMedicineImage = async (req, res) => {
       });
     });
 
+    // master_catalog update
     await prisma.master_catalog.update({
       where: { id: Number(id) },
       data:  { image_url: imageUrl },
     });
+
+    // linked product গুলোর image ও update করো
+    const shopItems = await prisma.shop_catalog_items.findMany({
+      where:  { catalog_id: Number(id) },
+      select: { product_id: true },
+    });
+
+    if (shopItems.length > 0) {
+      for (const { product_id } of shopItems) {
+        await prisma.productImage.deleteMany({ where: { productId: product_id } });
+        await prisma.productImage.create({ data: { productId: product_id, image: imageUrl } });
+      }
+    }
 
     return res.status(200).json({ success: true, data: { imageUrl } });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
-
 
 export const deleteMedicineImage = async (req, res) => {
   try {
