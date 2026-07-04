@@ -221,34 +221,25 @@ function mapMedicineToProductBody(med, brandId) {
   if (med.price_1pc) {
     productAttributes.push({
       size:        "1 PC",
-      costPrice:   Number(med.price_1pc) ,
+      costPrice:   Number(med.price_1pc),
       retailPrice: Number(med.price_1pc),
       stockAmount: 0,
     });
   }
 
-  // if (med.price_10pc) {
-  //   productAttributes.push({
-  //     size:        "10 PCS",
-  //     costPrice:   Number(med.price_10pc) * 0.85,
-  //     retailPrice: Number(med.price_10pc),
-  //     stockAmount: 0,
-  //   });
-  // }
-
   return {
-    name:              med.medicine_name,
-    brandId:           String(brandId),
-    categoryId:        MEDICINE_CATEGORY_ID,
-    shortDescription:  [med.generic_name, med.strength, med.dosage_form]
-                          .filter(Boolean).join(" | "),
-    isActive:          "true",
-    isTrending:        "false",
-    isFeatured:        "false",
+  name: [med.medicine_name, med.strength].filter(Boolean).join(" "),
+    brandId:          String(brandId),
+    categoryId:       MEDICINE_CATEGORY_ID,
+    shortDescription: [med.generic_name, med.strength, med.dosage_form]
+                        .filter(Boolean).join(" | "),
+    isActive:         "true",
+    isTrending:       "false",
+    isFeatured:       "false",
     productAttributes,
+    imageUrl:         med.image_url || null,  // ← এটা যোগ করুন
   };
 }
-
 
 // ------------------------------------------------------------
 // 3. BULK ADD — createProduct() কে আসলে call করে
