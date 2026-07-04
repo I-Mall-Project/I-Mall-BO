@@ -6,7 +6,8 @@ import {
   searchMasterCatalog,
   getCatalogFilters,
   bulkAddToShop,
-  updateMedicineImage
+  updateMedicineImage,
+  deleteMedicineImage
 } from "../../controllers/master/mastercatalog.js";
 import verify from "../../utils/verifyToken.js";
 import multer from "multer";
