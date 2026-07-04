@@ -52,6 +52,10 @@ export const createProduct = async (req, res) => {
       }
     }
 
+    else if (req.body.imageUrl) {   // ← এই block যোগ করুন
+  newImages.push({ image: req.body.imageUrl });
+}
+
     // ✅ Step 2: Use Prisma transaction for only DB work
     const newProduct = await prisma.$transaction(
       async (tx) => {
