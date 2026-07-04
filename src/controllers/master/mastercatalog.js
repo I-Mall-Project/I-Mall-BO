@@ -475,3 +475,64 @@ export const deleteMedicineImage = async (req, res) => {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
+
+
+// GET /api/v1/master-catalog/no-image?brandId=xxx
+export const getMedicinesWithoutImage = async (req, res) => {
+  try {
+    const { brandId, page = 1, limit = 20 } = req.query;
+    if (!brandId) return res.status(400).json({ success: false, message: "brandId প্রয়োজন" });
+
+    const skip = (Number(page) - 1) * Number(limit);
+
+    const [items, total] = await Promise.all([
+      prisma.shop_catalog_items.findMany({
+        where: {
+          brand_id:       String(brandId),
+          master_catalog: { image_url: null },
+        },
+        skip,
+        take: Number(limit),
+        select: {
+          catalog_id: true,
+          product_id: true,
+          master_catalog: {
+            select: {
+              id:            true,
+              medicine_name: true,
+              generic_name:  true,
+              strength:      true,
+              dosage_form:   true,
+              company_name:  true,
+              image_url:     true,
+            },
+          },
+        },
+      }),
+      prisma.shop_catalog_items.count({
+        where: {
+          brand_id:       String(brandId),
+          master_catalog: { image_url: null },
+        },
+      }),
+    ]);
+
+    const data = items.map(i => ({
+      catalogId:    i.catalog_id,
+      productId:    i.product_id,
+      medicineName: i.master_catalog.medicine_name,
+      genericName:  i.master_catalog.generic_name,
+      strength:     i.master_catalog.strength,
+      dosageForm:   i.master_catalog.dosage_form,
+      companyName:  i.master_catalog.company_name,
+    }));
+
+    return res.status(200).json({
+      success: true,
+      data,
+      pagination: { page: Number(page), limit: Number(limit), total, pages: Math.ceil(total / Number(limit)) },
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};

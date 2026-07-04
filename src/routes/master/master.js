@@ -26,5 +26,7 @@ router.put("/v1/master-catalog/:id/image", verify, upload.single("image"), updat
 
 router.delete("/v1/master-catalog/:id/image", verify, deleteMedicineImage);
 
+router.get("/v1/master-catalog/no-image", verify, getMedicinesWithoutImage);
+
 
 export default router;
