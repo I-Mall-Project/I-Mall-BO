@@ -1010,49 +1010,140 @@ export const deleteProduct = async (req, res) => {
 
 //For Customer
 //get all products
+// export const getProductsForCustomer = async (req, res) => {
+//   try {
+//     const products = await prisma.product.findMany({
+//       where: {
+//         isDeleted: false,
+//         isActive: true,
+//         AND: [
+//           {
+//             name: {
+//               contains: req.query.name,
+//               mode: "insensitive",
+//             },
+//           },
+//           {
+//             productCode: {
+//               contains: req.query.product_code,
+//               mode: "insensitive",
+//             },
+//           },
+//           {
+//             barcode: {
+//               contains: req.query.barcode,
+//               mode: "insensitive",
+//             },
+//           },
+//         ],
+//       },
+//       select: {
+//         id: true,
+//         user: { select: { name: true, image: true } },
+//         productCode: true,
+//         barcode: true,
+//         name: true,
+//         shortDescription: true,
+//         longDescription: true,
+//         sku: true,
+//         viewCount: true,
+//         slug: true,
+//         review: { include: { user: true, product: true } },
+//         categoryId: true,
+//         subcategoryId: true,
+//         subsubcategoryId: true,
+//         brandId: true,
+//         category: { select: { name: true } },
+//         subcategory: { select: { name: true } },
+//         subsubcategory: { select: { name: true } },
+//         brand: { select: { name: true } },
+//         campaign: { select: { name: true } },
+//         images: { select: { image: true } },
+//         productAttributes: {
+//           select: {
+//             id: true,
+//             size: true,
+//             costPrice: true,
+//             retailPrice: true,
+//             discountPercent: true,
+//             discountPrice: true,
+//             discountedRetailPrice: true,
+//             stockAmount: true,
+//           },
+//         },
+//         createdAt: true,
+//         isActive: true,
+//         isTrending: true,
+//         isFeatured: true,
+//       },
+//       orderBy: {
+//         createdAt: "desc",
+//       },
+//       skip:
+//         req.query.limit && req.query.page
+//           ? parseInt(req.query.limit * (req.query.page - 1))
+//           : parseInt(defaultLimit() * (defaultPage() - 1)),
+//       take: req.query.limit
+//         ? parseInt(req.query.limit)
+//         : parseInt(defaultLimit()),
+//     });
+
+//     if (products.length === 0)
+//       return res
+//         .status(200)
+//         .json(jsonResponse(true, "No product is available", null));
+
+//     if (products) {
+//       return res
+//         .status(200)
+//         .json(
+//           jsonResponse(true, `${products.length} products found`, products)
+//         );
+//     } else {
+//       return res
+//         .status(404)
+//         .json(jsonResponse(false, "Something went wrong. Try again", null));
+//     }
+//   } catch (error) {
+//     console.log(error);
+//     return res.status(500).json(jsonResponse(false, error, null));
+//   }
+// };
+
+
+
 export const getProductsForCustomer = async (req, res) => {
   try {
-    const {
-      name,
-      product_code,
-      barcode,
-      limit,
-      page,
-    } = req.query;
-
-    const query = {
-      where: {
-        isDeleted: false,
-        isActive: true,
-        AND: [
-          {
-            name: {
-              contains: name || "",
-              mode: "insensitive",
-            },
-          },
-          {
-            productCode: {
-              contains: product_code || "",
-              mode: "insensitive",
-            },
-          },
-          {
-            barcode: {
-              contains: barcode || "",
-              mode: "insensitive",
-            },
-          },
-        ],
-      },
-      select: {
-        id: true,
-        user: {
-          select: {
-            name: true,
-            image: true,
+    const where = {
+      isDeleted: false,
+      isActive: true,
+      AND: [
+        {
+          name: {
+            contains: req.query.name || "",
+            mode: "insensitive",
           },
         },
+        {
+          productCode: {
+            contains: req.query.product_code || "",
+            mode: "insensitive",
+          },
+        },
+        {
+          barcode: {
+            contains: req.query.barcode || "",
+            mode: "insensitive",
+          },
+        },
+      ],
+    };
+
+    const options = {
+      where,
+      select: {
+        id: true,
+        user: { select: { name: true, image: true } },
         productCode: true,
         barcode: true,
         name: true,
@@ -1061,46 +1152,17 @@ export const getProductsForCustomer = async (req, res) => {
         sku: true,
         viewCount: true,
         slug: true,
-        review: {
-          include: {
-            user: true,
-            product: true,
-          },
-        },
+        review: { include: { user: true, product: true } },
         categoryId: true,
         subcategoryId: true,
         subsubcategoryId: true,
         brandId: true,
-        category: {
-          select: {
-            name: true,
-          },
-        },
-        subcategory: {
-          select: {
-            name: true,
-          },
-        },
-        subsubcategory: {
-          select: {
-            name: true,
-          },
-        },
-        brand: {
-          select: {
-            name: true,
-          },
-        },
-        campaign: {
-          select: {
-            name: true,
-          },
-        },
-        images: {
-          select: {
-            image: true,
-          },
-        },
+        category: { select: { name: true } },
+        subcategory: { select: { name: true } },
+        subsubcategory: { select: { name: true } },
+        brand: { select: { name: true } },
+        campaign: { select: { name: true } },
+        images: { select: { image: true } },
         productAttributes: {
           select: {
             id: true,
@@ -1123,32 +1185,23 @@ export const getProductsForCustomer = async (req, res) => {
       },
     };
 
-    // Pagination only when limit & page are provided
-    if (limit && page) {
-      query.skip = (Number(page) - 1) * Number(limit);
-      query.take = Number(limit);
+    if (req.query.limit && req.query.page) {
+      options.skip =
+        (Number(req.query.page) - 1) * Number(req.query.limit);
+      options.take = Number(req.query.limit);
     }
 
-    const products = await prisma.product.findMany(query);
-
-    if (!products.length) {
-      return res
-        .status(200)
-        .json(jsonResponse(true, "No product is available", []));
-    }
+    const products = await prisma.product.findMany(options);
 
     return res.status(200).json(
-      jsonResponse(
-        true,
-        `${products.length} products found`,
-        products
-      )
+      jsonResponse(true, `${products.length} products found`, products)
     );
   } catch (error) {
-    console.error(error);
+    console.log(error);
     return res.status(500).json(jsonResponse(false, error.message, null));
   }
 };
+
 // Trending Products
 export const getTrendingProductsForCustomer = async (req, res) => {
   try {
